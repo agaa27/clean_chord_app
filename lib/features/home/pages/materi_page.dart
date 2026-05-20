@@ -3,7 +3,7 @@ import 'package:flutter_application_1/features/kuis_chord/pages/kuis_chord_page.
 import 'package:flutter_application_1/features/metronom/pages/metronom_page.dart';
 import '../widgets/menu_card.dart';
 import 'package:flutter_application_1/features/pustaka_chord/pages/pustaka_chord_page.dart';
-import 'package:flutter_application_1/features/gambar_chord/pages/gambar_chord_level_page.dart';
+import 'package:flutter_application_1/features/gambar_chord/pages/gambar_chord_page.dart';
 
 class MateriPage extends StatefulWidget {
   const MateriPage({super.key});
@@ -356,7 +356,7 @@ class _MateriPageState extends State<MateriPage> with TickerProviderStateMixin {
       icon: Icons.fingerprint_rounded, 
       onTap: () => Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const GambarChordLevelPage()),
+        MaterialPageRoute(builder: (_) => GambarChordPage()),
       ),
     ),
   ];
