@@ -4,14 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../pustaka_chord/data/chord_library.dart';
 import '../../pustaka_chord/models/chord_model.dart';
-import '../../pustaka_chord/models/chord_shape_model.dart';
 import '../../pustaka_chord/widgets/chord_fretboard_widget.dart';
 import '../models/gambar_level_model.dart';
+import '../services/quiz_audio_service.dart';
 import '../widgets/interactive_fretboard_widget.dart';
 import '../../kuis_chord/widgets/kuis_progress_bar.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Konversi nama chord (sama dengan kuis_chord)
+// Helper nama chord (sama dengan kuis_chord)
 // ─────────────────────────────────────────────────────────────────────────────
 String _formatChordName(ChordModel c) {
   if (c.type == 'major') return c.root;
@@ -20,23 +20,23 @@ String _formatChordName(ChordModel c) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tuning standar — open string notes (semitone, C=0)
-// index: 0=low E, 1=A, 2=D, 3=G, 4=B, 5=high e
+// Tuning standar gitar (semitone, C=0)
+// index 0 = low E, 1 = A, 2 = D, 3 = G, 4 = B, 5 = high e
 // ─────────────────────────────────────────────────────────────────────────────
-const List<int> _openStringNotes = [4, 9, 2, 7, 11, 4]; // E A D G B E
+const List<int> _openNotes = [4, 9, 2, 7, 11, 4]; // E A D G B E
 const List<String> _noteNames = [
-  'C','C#','D','D#','E','F','F#','G','G#','A','A#','B'
+  'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'
 ];
 
-// Konversi (string, fret absolut) → nama nada
-String _fretToNote(int stringIdx, int fret) {
-  return _noteNames[(_openStringNotes[stringIdx] + fret) % 12];
-}
+/// Nada dari senar [s] ditekan di [fret] (fret 0 = open string).
+String _note(int s, int fret) => _noteNames[(_openNotes[s] + fret) % 12];
+
+int _noteIndex(String n) => _noteNames.indexOf(n);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Set nada per jenis chord — dipakai untuk validasi bebas posisi
+// Interval per tipe chord
 // ─────────────────────────────────────────────────────────────────────────────
-const Map<String, List<int>> _chordIntervals = {
+const Map<String, List<int>> _intervals = {
   'major': [0, 4, 7],
   'minor': [0, 3, 7],
   '7':     [0, 4, 7, 10],
@@ -47,68 +47,75 @@ const Map<String, List<int>> _chordIntervals = {
   '5':     [0, 7],
 };
 
-int _noteIndex(String note) => _noteNames.indexOf(note);
-
-/// Kembalikan set nada (string) yang membentuk chord ini
+/// Set nada (nama) yang menyusun chord ini.
 Set<String> _chordNoteSet(ChordModel chord) {
-  final intervals = _chordIntervals[chord.type];
-  if (intervals == null) return {};
+  final iv = _intervals[chord.type];
+  if (iv == null) return {};
   final root = _noteIndex(chord.root);
-  return intervals
-      .map((i) => _noteNames[(root + i) % 12])
-      .toSet();
+  if (root == -1) return {};
+  return iv.map((i) => _noteNames[(root + i) % 12]).toSet();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Validasi jawaban user — BEBAS POSISI
+// Validasi jawaban — BEBAS POSISI, MENDUKUNG BARRE
 //
-// Aturan:
-//  1. Setiap string tidak-mute & ada dot → hasilkan 1 nada
-//  2. Kumpulkan semua nada unik yang dihasilkan user
-//  3. Benar jika:
-//     • Semua nada dalam chordNoteSet ada di userNotes
-//     • Semua userNotes ada di chordNoteSet (tidak ada nada asing)
-//     • Minimal ada dot (tidak boleh kosong semua)
+// Nada aktif = semua string yang TIDAK di-mute:
+//   • String dengan dot  → nada dari fret yang ditekan (dot.fret)
+//   • String tanpa dot   → nada open string (fret 0)
+//
+// Jawaban BENAR jika set nada aktif user == set nada chord (exact match).
+//
+// Catatan barre: user menaruh dot di setiap string yang ditekan barre,
+// senar yang tidak ikut barre tapi di-mute tidak masuk hitungan — sudah benar.
 // ─────────────────────────────────────────────────────────────────────────────
 bool _validateAnswer({
   required ChordModel chord,
-  required List<FingerPosition> userDots,
-  required List<bool> userMuted,
+  required List<FingerPosition> dots,
+  required List<bool> muted,
 }) {
-  if (userDots.isEmpty) return false;
+  final target = _chordNoteSet(chord);
+  if (target.isEmpty) return false;
 
-  final chordNotes = _chordNoteSet(chord);
-  if (chordNotes.isEmpty) return false;
-
+  final stringsWithDot = dots.map((d) => d.string).toSet();
   final userNotes = <String>{};
-  for (final dot in userDots) {
-    if (userMuted[dot.string]) continue;
-    userNotes.add(_fretToNote(dot.string, dot.fret));
+
+  // String dengan dot → nada fret yang ditekan
+  for (final d in dots) {
+    if (!muted[d.string]) userNotes.add(_note(d.string, d.fret));
+  }
+  // String tanpa dot, tidak mute → open string
+  for (int s = 0; s < 6; s++) {
+    if (!muted[s] && !stringsWithDot.contains(s)) {
+      userNotes.add(_note(s, 0));
+    }
   }
 
   if (userNotes.isEmpty) return false;
-
-  // Semua nada chord harus ada, tidak boleh ada nada di luar chord
-  return userNotes.containsAll(chordNotes) &&
-      chordNotes.containsAll(userNotes);
+  return userNotes.containsAll(target) && target.containsAll(userNotes);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Warna review per string:
-//   hijau = nada di string ini termasuk chord
-//   merah = nada asing / di string yang harusnya tidak ada nada
+// Warna review per string (hijau = nada chord, merah = nada asing)
 // ─────────────────────────────────────────────────────────────────────────────
-Map<int, Color> _buildReviewColors({
+Map<int, Color> _reviewColors({
   required ChordModel chord,
-  required List<FingerPosition> userDots,
+  required List<FingerPosition> dots,
+  required List<bool> muted,
 }) {
-  final chordNotes = _chordNoteSet(chord);
-  final result = <int, Color>{};
-  for (final dot in userDots) {
-    final note = _fretToNote(dot.string, dot.fret);
-    result[dot.string] = chordNotes.contains(note)
-        ? const Color(0xFF00E676)
-        : const Color(0xFFFF4C4C);
+  final target         = _chordNoteSet(chord);
+  final stringsWithDot = dots.map((d) => d.string).toSet();
+  final result         = <int, Color>{};
+
+  for (final d in dots) {
+    if (muted[d.string]) continue;
+    final ok = target.contains(_note(d.string, d.fret));
+    result[d.string] = ok ? const Color(0xFF00E676) : const Color(0xFFFF4C4C);
+  }
+  for (int s = 0; s < 6; s++) {
+    if (!muted[s] && !stringsWithDot.contains(s)) {
+      final ok = target.contains(_note(s, 0));
+      result[s] = ok ? const Color(0xFF00E676) : const Color(0xFFFF4C4C);
+    }
   }
   return result;
 }
@@ -133,15 +140,19 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
   Timer? _timer;
 
   ChordModel? _currentChord;
-  List<FingerPosition> _userDots  = [];
-  List<bool> _userMuted           = List.filled(6, false);
-  bool _showIntro                 = true;
-  bool _isReviewing               = false;
-  bool _isCorrect                 = false;
-  bool _isGameOver                = false;
-  bool _dialogShown               = false;
-  bool _showAnswerPanel           = false; // panel lihat jawaban referensi
-  final Random _random            = Random();
+  List<FingerPosition> _dots  = [];
+  List<bool>  _muted          = List.filled(6, false);
+  int  _baseFret              = 1;   // fret pertama yang terlihat di fretboard
+  bool _showIntro             = true;
+  bool _isReviewing           = false;
+  bool _isCorrect             = false;
+  bool _isGameOver            = false;
+  bool _dialogShown           = false;
+  bool _showAnswerPanel       = false;
+  final Random _rng           = Random();
+
+  // ── Audio ─────────────────────────────────────────────────────────────────
+  final QuizAudioService _audio = QuizAudioService();
 
   // ── Animasi ───────────────────────────────────────────────────────────────
   late AnimationController _questionAnim;
@@ -167,14 +178,13 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     }
   }
 
-  int get _initialDuration =>
-      gambarDurationForDifficulty(widget.level.difficulty);
+  int get _initDuration => gambarDurationForDifficulty(widget.level.difficulty);
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
-    _timeLeft = _initialDuration;
+    _timeLeft = _initDuration;
 
     _questionAnim = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 300));
@@ -186,6 +196,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     _resultScale = CurvedAnimation(
         parent: _resultAnim, curve: Curves.elasticOut);
 
+    _audio.init();
     _generateQuestion();
     _questionAnim.forward();
   }
@@ -195,21 +206,19 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     _timer?.cancel();
     _questionAnim.dispose();
     _resultAnim.dispose();
+    _audio.dispose();
     super.dispose();
   }
 
   // ── Game flow ─────────────────────────────────────────────────────────────
   void _startGame() {
-    setState(() {
-      _showIntro   = false;
-      _dialogShown = false;
-    });
+    setState(() { _showIntro = false; _dialogShown = false; });
     _startTimer();
   }
 
   void _startTimer() {
     _timer?.cancel();
-    _timeLeft = _initialDuration;
+    _timeLeft = _initDuration;
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) { t.cancel(); return; }
       if (_timeLeft > 0) {
@@ -218,6 +227,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
         t.cancel();
         if (!_isGameOver) {
           setState(() => _isGameOver = true);
+          _audio.playFail();
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _showEndDialog();
           });
@@ -234,9 +244,10 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     final valid = _validChords;
     if (valid.isEmpty) return;
     setState(() {
-      _currentChord    = valid[_random.nextInt(valid.length)];
-      _userDots        = [];
-      _userMuted       = List.filled(6, false);
+      _currentChord    = valid[_rng.nextInt(valid.length)];
+      _dots            = [];
+      _muted           = List.filled(6, false);
+      _baseFret        = 1;   // reset ke open position setiap soal baru
       _isReviewing     = false;
       _isCorrect       = false;
       _showAnswerPanel = false;
@@ -245,25 +256,35 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     _questionAnim.forward();
   }
 
+  // ── Navigasi baseFret (untuk chord barre di posisi tinggi) ────────────────
+  void _shiftBaseFret(int delta) {
+    if (_isReviewing || _isGameOver) return;
+    final next = (_baseFret + delta).clamp(1, 17);
+    if (next == _baseFret) return;
+    setState(() {
+      // Hapus dot yang keluar dari range baru
+      _baseFret = next;
+      _dots = _dots
+          .where((d) => d.fret >= _baseFret && d.fret < _baseFret + 5)
+          .toList();
+    });
+  }
+
   // ── Interaksi fretboard ───────────────────────────────────────────────────
   void _onTapFret(int string, int fret) {
     if (_isReviewing || _isGameOver) return;
     setState(() {
-      final existing = _userDots.indexWhere((d) => d.string == string);
-      if (existing != -1) {
-        if (_userDots[existing].fret == fret) {
-          // Tap posisi sama → hapus
-          _userDots = List.from(_userDots)..removeAt(existing);
+      final idx = _dots.indexWhere((d) => d.string == string);
+      if (idx != -1) {
+        if (_dots[idx].fret == fret) {
+          _dots = List.from(_dots)..removeAt(idx);           // hapus
         } else {
-          // Tap posisi beda → pindah
-          _userDots = List.from(_userDots)
-            ..[existing] = FingerPosition(string: string, fret: fret);
+          _dots = List.from(_dots)                           // pindah
+            ..[idx] = FingerPosition(string: string, fret: fret);
         }
-      } else {
-        if (_userDots.length < 6) {
-          _userDots   = [..._userDots, FingerPosition(string: string, fret: fret)];
-          _userMuted  = List.from(_userMuted)..[string] = false;
-        }
+      } else if (_dots.length < 6) {
+        _dots  = [..._dots, FingerPosition(string: string, fret: fret)];
+        _muted = List.from(_muted)..[string] = false;
       }
     });
   }
@@ -272,9 +293,9 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     if (_isReviewing || _isGameOver) return;
     HapticFeedback.selectionClick();
     setState(() {
-      _userMuted = List.from(_userMuted)..[string] = !_userMuted[string];
-      if (_userMuted[string]) {
-        _userDots = _userDots.where((d) => d.string != string).toList();
+      _muted = List.from(_muted)..[string] = !_muted[string];
+      if (_muted[string]) {
+        _dots = _dots.where((d) => d.string != string).toList();
       }
     });
   }
@@ -285,14 +306,18 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     _timer?.cancel();
 
     final correct = _validateAnswer(
-      chord:    _currentChord!,
-      userDots: _userDots,
-      userMuted: _userMuted,
+      chord: _currentChord!,
+      dots:  _dots,
+      muted: _muted,
     );
 
-    correct
-        ? HapticFeedback.lightImpact()
-        : HapticFeedback.heavyImpact();
+    if (correct) {
+      HapticFeedback.lightImpact();
+      _audio.playCorrect();
+    } else {
+      HapticFeedback.heavyImpact();
+      _audio.playWrong();
+    }
 
     setState(() {
       _isReviewing = true;
@@ -308,7 +333,13 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
       if (!mounted || _isGameOver) return;
       _currentQuestion++;
       if (_currentQuestion >= widget.level.targetPoints) {
-        _showWinDialog();
+        // Semua soal selesai
+        Future.delayed(const Duration(milliseconds: 400), () {
+          if (mounted) _audio.playWin();
+        });
+        Future.delayed(const Duration(milliseconds: 600), () {
+          if (mounted && !_dialogShown) _showWinDialog();
+        });
       } else {
         _generateQuestion();
         _startTimer();
@@ -318,20 +349,27 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
 
   // ── Reset ─────────────────────────────────────────────────────────────────
   void _resetGame() {
+    _timer?.cancel();
     setState(() {
       _score           = 0;
       _currentQuestion = 0;
-      _timeLeft        = _initialDuration;
+      _timeLeft        = _initDuration;
       _isGameOver      = false;
       _dialogShown     = false;
       _isReviewing     = false;
       _isCorrect       = false;
-      _userDots        = [];
-      _userMuted       = List.filled(6, false);
+      _dots            = [];
+      _muted           = List.filled(6, false);
+      _baseFret        = 1;
       _showAnswerPanel = false;
     });
     _generateQuestion();
     _startTimer();
+  }
+
+  void _exitGame() {
+    _timer?.cancel();
+    if (mounted && Navigator.canPop(context)) Navigator.pop(context);
   }
 
   // ── Dialogs ───────────────────────────────────────────────────────────────
@@ -343,14 +381,15 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
       icon: '🎸',
       title: 'Selesai!',
       titleColor: _correct,
-      message: 'Kamu menjawab benar $_score dari ${widget.level.targetPoints} soal.',
+      message:
+          'Kamu menjawab benar $_score dari ${widget.level.targetPoints} soal.',
       actions: [
         _dialogBtn(
           label: 'Selesai',
           color: _accent,
           onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            Navigator.of(context).pop();
+            Navigator.of(context, rootNavigator: false).pop();
+            _exitGame();
           },
         ),
       ],
@@ -364,13 +403,14 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
       icon: '⏱',
       title: 'Waktu Habis!',
       titleColor: _wrong,
-      message: 'Soal ${_currentQuestion + 1} / ${widget.level.targetPoints}\nBenar: $_score soal.',
+      message:
+          'Soal ${_currentQuestion + 1} / ${widget.level.targetPoints}\nBenar: $_score soal.',
       actions: [
         _dialogBtn(
           label: 'Coba Lagi',
           color: _accent,
           onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
+            Navigator.of(context, rootNavigator: false).pop();
             _resetGame();
           },
         ),
@@ -378,8 +418,8 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
           label: 'Keluar',
           color: Colors.white38,
           onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            Navigator.of(context).pop();
+            Navigator.of(context, rootNavigator: false).pop();
+            _exitGame();
           },
         ),
       ],
@@ -394,7 +434,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     required List<Widget> actions,
   }) {
     if (!mounted) return;
-    showDialog(
+    showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (_) => PopScope(
@@ -429,9 +469,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                 Text(message,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                        color: Colors.white60,
-                        fontSize: 14,
-                        height: 1.5)),
+                        color: Colors.white60, fontSize: 14, height: 1.5)),
                 const SizedBox(height: 22),
                 ...actions,
               ],
@@ -439,7 +477,9 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
           ),
         ),
       ),
-    );
+    ).then((_) {
+      if (mounted) setState(() => _dialogShown = false);
+    });
   }
 
   Widget _dialogBtn({
@@ -483,9 +523,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
           try {
             return chordLibrary
                 .firstWhere((c) => _formatChordName(c) == name);
-          } catch (_) {
-            return null;
-          }
+          } catch (_) { return null; }
         })
         .whereType<ChordModel>()
         .toList();
@@ -496,8 +534,8 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 20, vertical: 14),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -506,13 +544,11 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                     child: const Icon(Icons.arrow_back_ios_new,
                         color: Colors.white38, size: 18),
                   ),
-                  Text(
-                    'Level ${widget.level.id}  •  ${widget.level.name}',
-                    style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600),
-                  ),
+                  Text('Level ${widget.level.id}  •  ${widget.level.name}',
+                      style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600)),
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 4),
@@ -559,11 +595,12 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '${widget.level.targetPoints} soal  •  ${_initialDuration}s per soal',
+                      '${widget.level.targetPoints} soal  •  ${_initDuration}s per soal',
                       style: const TextStyle(
                           color: Colors.white38, fontSize: 11),
                     ),
                     const SizedBox(height: 10),
+
                     // Petunjuk
                     Container(
                       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -575,13 +612,17 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                             color: accent.withValues(alpha: 0.1)),
                       ),
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Icon(Icons.info_outline_rounded,
                               color: accent, size: 14),
                           const SizedBox(width: 8),
                           const Expanded(
                             child: Text(
-                              'Tap fret untuk pasang dot • Tap lagi di posisi sama untuk hapus • Tap tombol senar (E A D G B e) untuk mute • Posisi bebas, asal menghasilkan nada chord yang benar',
+                              'Tap fret untuk pasang dot · Tap lagi di posisi sama untuk hapus · '
+                              'Tap senar (E A D G B e) untuk mute · '
+                              'Geser fret dengan tombol ▲▼ untuk chord barre · '
+                              'Posisi bebas asal menghasilkan nada chord yang benar',
                               style: TextStyle(
                                   color: Colors.white38,
                                   fontSize: 10,
@@ -593,7 +634,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                     ),
                     const SizedBox(height: 12),
 
-                    // Preview chord — pakai ChordFretboardWidget asli
+                    // Preview chord
                     Expanded(
                       child: Padding(
                         padding:
@@ -687,9 +728,10 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
   // ─────────────────────────── GAME SCREEN ─────────────────────────────────
   Widget _buildGameScreen() {
     final accent  = _accent;
-    final timeLow = _timeLeft <= (_initialDuration ~/ 5);
-    final reviewColors = _isReviewing && _currentChord != null
-        ? _buildReviewColors(chord: _currentChord!, userDots: _userDots)
+    final timeLow = _timeLeft <= (_initDuration ~/ 5);
+    final colors  = _isReviewing && _currentChord != null
+        ? _reviewColors(
+            chord: _currentChord!, dots: _dots, muted: _muted)
         : <int, Color>{};
 
     return Scaffold(
@@ -707,8 +749,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
                     child: Container(
-                      width: 36,
-                      height: 36,
+                      width: 36, height: 36,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: Colors.white.withValues(alpha: 0.05),
@@ -739,7 +780,32 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                       ],
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
+
+                  // Mute toggle audio
+                  GestureDetector(
+                    onTap: () => setState(() => _audio.toggleMute()),
+                    child: Container(
+                      width: 34, height: 34,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: 0.05),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Icon(
+                        _audio.isMuted
+                            ? Icons.volume_off_rounded
+                            : Icons.volume_up_rounded,
+                        color: _audio.isMuted
+                            ? Colors.white24
+                            : Colors.white54,
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // Timer badge
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
                     padding: const EdgeInsets.symmetric(
@@ -817,8 +883,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                           letterSpacing: 1.5,
                         ),
                       ),
-                      // Nada-nada chord (hint)
-                      if (!_isReviewing && _currentChord != null) ...[
+                      if (!_isReviewing) ...[
                         const SizedBox(width: 10),
                         Text(
                           _chordNoteSet(_currentChord!).join(' '),
@@ -847,7 +912,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
 
             const SizedBox(height: 8),
 
-            // ── Fretboard + panel jawaban referensi ─────────────────────
+            // ── Fretboard ────────────────────────────────────────────────
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -863,25 +928,37 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                     padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
                     child: Column(
                       children: [
-                        // Tombol mute per string
+                        // Tombol mute senar
                         _buildMuteRow(accent),
                         const SizedBox(height: 4),
 
-                        // Fretboard interaktif
+                        // Fretboard + kontrol baseFret di kanan
                         Expanded(
-                          child: InteractiveFretboardWidget(
-                            placedDots:   _userDots,
-                            mutedStrings: _userMuted,
-                            onTap:        _onTapFret,
-                            onToggleMute: _onToggleMute,
-                            reviewMode:   _isReviewing,
-                            reviewColors: reviewColors,
-                            baseFret: 1,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Fretboard interaktif
+                              Expanded(
+                                child: InteractiveFretboardWidget(
+                                  placedDots:   _dots,
+                                  mutedStrings: _muted,
+                                  onTap:        _onTapFret,
+                                  reviewMode:   _isReviewing,
+                                  reviewColors: colors,
+                                  baseFret:     _baseFret,
+                                ),
+                              ),
+
+                              // ── Kontrol geser fret (untuk barre chord) ──
+                              if (!_isReviewing)
+                                _buildFretNavColumn(accent),
+                            ],
                           ),
                         ),
 
-                        // Panel referensi jawaban (setelah salah)
-                        if (_isReviewing && !_isCorrect && _currentChord != null)
+                        // Panel referensi jawaban (saat salah)
+                        if (_isReviewing && !_isCorrect &&
+                            _currentChord != null)
                           _buildReferencePanel(accent),
                       ],
                     ),
@@ -892,7 +969,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
 
             const SizedBox(height: 10),
 
-            // ── Tombol bawah ────────────────────────────────────────────
+            // ── Tombol bawah ─────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
               child: Row(
@@ -905,16 +982,15 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(
-                              color:
-                                  Colors.white.withValues(alpha: 0.15)),
+                              color: Colors.white.withValues(alpha: 0.15)),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(24)),
                         ),
                         onPressed: _isReviewing
                             ? null
                             : () => setState(() {
-                                  _userDots  = [];
-                                  _userMuted = List.filled(6, false);
+                                  _dots  = [];
+                                  _muted = List.filled(6, false);
                                 }),
                         icon: const Icon(Icons.refresh_rounded,
                             size: 16, color: Colors.white38),
@@ -967,7 +1043,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     );
   }
 
-  // ── Baris tombol mute senar ───────────────────────────────────────────────
+  // ── Baris tombol mute per senar ───────────────────────────────────────────
   Widget _buildMuteRow(Color accent) {
     const labels = ['E', 'A', 'D', 'G', 'B', 'e'];
     return Padding(
@@ -975,7 +1051,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: List.generate(6, (i) {
-          final isMuted = _userMuted[i];
+          final isMuted = _muted[i];
           return GestureDetector(
             onTap: () => _onToggleMute(i),
             child: AnimatedContainer(
@@ -1010,11 +1086,92 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     );
   }
 
-  // ── Panel referensi jawaban benar (tampil saat salah) ─────────────────────
+  // ── Kolom navigasi baseFret (kanan fretboard) ─────────────────────────────
+  Widget _buildFretNavColumn(Color accent) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Tombol naik fret
+          _fretNavBtn(
+            icon: Icons.keyboard_arrow_up_rounded,
+            enabled: _baseFret > 1,
+            onTap: () => _shiftBaseFret(-1),
+            accent: accent,
+          ),
+          const SizedBox(height: 4),
+          // Label fret saat ini
+          Container(
+            width: 32,
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            decoration: BoxDecoration(
+              color: _baseFret > 1
+                  ? accent.withValues(alpha: 0.1)
+                  : Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: _baseFret > 1
+                    ? accent.withValues(alpha: 0.4)
+                    : Colors.white.withValues(alpha: 0.08),
+              ),
+            ),
+            child: Text(
+              'F$_baseFret',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: _baseFret > 1 ? accent : Colors.white38,
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          // Tombol turun fret
+          _fretNavBtn(
+            icon: Icons.keyboard_arrow_down_rounded,
+            enabled: _baseFret < 17,
+            onTap: () => _shiftBaseFret(1),
+            accent: accent,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _fretNavBtn({
+    required IconData icon,
+    required bool enabled,
+    required VoidCallback onTap,
+    required Color accent,
+  }) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: enabled
+              ? accent.withValues(alpha: 0.08)
+              : Colors.white.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: enabled
+                ? accent.withValues(alpha: 0.3)
+                : Colors.white.withValues(alpha: 0.06),
+          ),
+        ),
+        child: Icon(icon,
+            color: enabled ? accent : Colors.white12, size: 18),
+      ),
+    );
+  }
+
+  // ── Panel referensi jawaban benar ────────────────────────────────────────
   Widget _buildReferencePanel(Color accent) {
-    final chord  = _currentChord!;
-    final shape  = chord.shapes.first;
-    final notes  = _chordNoteSet(chord);
+    final chord = _currentChord!;
+    final shape = chord.shapes.first;
+    final notes = _chordNoteSet(chord);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -1025,11 +1182,11 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
         border: Border.all(color: _wrong.withValues(alpha: 0.2)),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Header toggle
           InkWell(
-            borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(14)),
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(14)),
             onTap: () =>
                 setState(() => _showAnswerPanel = !_showAnswerPanel),
             child: Padding(
@@ -1061,8 +1218,6 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
               ),
             ),
           ),
-
-          // Panel ChordFretboardWidget (collapse)
           if (_showAnswerPanel)
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),

@@ -3,12 +3,12 @@ import 'package:flutter/services.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Model posisi dot user
-// string: 0=low E … 5=high e
-// fret  : absolut (1-based, sesuai posisi di fretboard)
+// string : 0 = low E … 5 = high e  (kiri ke kanan di fretboard)
+// fret   : 0 = open string (tidak ditekan), 1–N = fret absolut
 // ─────────────────────────────────────────────────────────────────────────────
 class FingerPosition {
   final int string;
-  final int fret;
+  final int fret; // 0 = open, 1+ = fret absolut
   const FingerPosition({required this.string, required this.fret});
 
   @override
@@ -22,7 +22,7 @@ class FingerPosition {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Warna dot — sama persis dengan chord_fretboard_widget.dart
+// Warna dot — identik dengan chord_fretboard_widget.dart
 // ─────────────────────────────────────────────────────────────────────────────
 const _kFingerColors = <int, Color>{
   1: Color(0xFFFF4C4C),
@@ -33,83 +33,81 @@ const _kFingerColors = <int, Color>{
 Color _dotColor(int idx) => _kFingerColors[(idx % 4) + 1]!;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Widget fretboard interaktif
-// Penampilan sepenuhnya mengikuti chord_fretboard_widget.dart (konsisten)
+// InteractiveFretboardWidget
+//
+// Tampilan sepenuhnya mengikuti chord_fretboard_widget.dart (warna, ukuran,
+// proporsi, nut, garis fret, garis senar, dot ukuran 13, glow, teks).
+//
+// Perbedaan dari widget asli:
+//   • User bisa tap setiap sel untuk menaruh / memindah / menghapus dot
+//   • Baris "mute" (E A D G B e) ada di luar widget ini, dikelola game page
+//   • Dot open-string (fret 0) tidak divisualisasikan di badan fretboard,
+//     melainkan ditandai dengan lingkaran ○ di atas nut (sama dengan widget asli)
 // ─────────────────────────────────────────────────────────────────────────────
-class InteractiveFretboardWidget extends StatefulWidget {
+class InteractiveFretboardWidget extends StatelessWidget {
   final List<FingerPosition> placedDots;
-  final List<bool> mutedStrings;
-  final void Function(int string, int fret) onTap;
-  final void Function(int string) onToggleMute;
+  final List<bool> mutedStrings;     // length 6, index 0=low E
+  final void Function(int string, int fret) onTap; // fret 1-based dari UI
   final bool reviewMode;
-  /// String index → warna review (hijau=benar, merah=salah)
-  final Map<int, Color> reviewColors;
-  final int baseFret;
+  final Map<int, Color> reviewColors; // string → warna review
+  final int baseFret;                 // fret pertama yang ditampilkan
 
   const InteractiveFretboardWidget({
     super.key,
     required this.placedDots,
     required this.mutedStrings,
     required this.onTap,
-    required this.onToggleMute,
-    this.reviewMode = false,
+    this.reviewMode   = false,
     this.reviewColors = const {},
-    this.baseFret = 1,
+    this.baseFret     = 1,
   });
 
-  @override
-  State<InteractiveFretboardWidget> createState() =>
-      _InteractiveFretboardWidgetState();
-}
-
-class _InteractiveFretboardWidgetState
-    extends State<InteractiveFretboardWidget> {
   static const int _strings = 6;
   static const int _frets   = 5;
 
-  // layout cache — diisi tiap build
-  double _leftPad = 24;
-  double _topPad  = 8;
-  double _strSp   = 0;
-  double _fretSp  = 0;
+  // Hit-test: koordinat lokal → (string, fret absolut 1-based)
+  ({int string, int fret})? _hitTest(
+      Offset local, double leftPad, double topPad,
+      double strSp, double fretSp) {
+    final double x = local.dx - leftPad;
+    final double y = local.dy - topPad;
+    if (y < -topPad || x < -leftPad / 2) return null;
 
-  void _recalc(BoxConstraints c) {
-    _leftPad = 24;
-    _topPad  = 8;
-    _strSp   = (c.maxWidth  - _leftPad - 10) / (_strings - 1);
-    _fretSp  = (c.maxHeight - _topPad  - 4)  / _frets;
-  }
-
-  ({int string, int fret})? _hitTest(Offset local) {
-    final double x = local.dx - _leftPad;
-    final double y = local.dy - _topPad;
-    if (y < 0) return null;
-
-    final int s = (x / _strSp).round().clamp(0, _strings - 1);
-    final int row = y ~/ _fretSp; // 0-based row
+    final int s   = (x / strSp).round().clamp(0, _strings - 1);
+    final int row = y ~/ fretSp; // 0-based row
     if (row < 0 || row >= _frets) return null;
-    return (string: s, fret: row + widget.baseFret); // absolut
+    return (string: s, fret: row + baseFret);
   }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (ctx, constraints) {
-      _recalc(constraints);
+      const double leftPad   = 24.0;
+      const double rightPad  = 10.0;
+      const double topPad    = 8.0;
+      const double bottomPad = 4.0;
+
+      final double usableW = constraints.maxWidth  - leftPad - rightPad;
+      final double usableH = constraints.maxHeight - topPad  - bottomPad;
+      final double strSp   = usableW / (_strings - 1);
+      final double fretSp  = usableH / _frets;
+
       return GestureDetector(
         onTapUp: (d) {
-          final hit = _hitTest(d.localPosition);
+          final hit = _hitTest(
+              d.localPosition, leftPad, topPad, strSp, fretSp);
           if (hit == null) return;
           HapticFeedback.selectionClick();
-          widget.onTap(hit.string, hit.fret);
+          onTap(hit.string, hit.fret);
         },
         child: CustomPaint(
           size: Size(constraints.maxWidth, constraints.maxHeight),
           painter: _InteractivePainter(
-            placedDots:   widget.placedDots,
-            mutedStrings: widget.mutedStrings,
-            baseFret:     widget.baseFret,
-            reviewMode:   widget.reviewMode,
-            reviewColors: widget.reviewColors,
+            placedDots:   placedDots,
+            mutedStrings: mutedStrings,
+            baseFret:     baseFret,
+            reviewMode:   reviewMode,
+            reviewColors: reviewColors,
           ),
         ),
       );
@@ -118,7 +116,7 @@ class _InteractiveFretboardWidgetState
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Painter — tampilan sama persis dengan _FretboardPainter di pustaka_chord
+// Painter — tampilan identik dengan _FretboardPainter di pustaka_chord
 // ─────────────────────────────────────────────────────────────────────────────
 class _InteractivePainter extends CustomPainter {
   final List<FingerPosition> placedDots;
@@ -151,7 +149,7 @@ class _InteractivePainter extends CustomPainter {
     final double fretSp  = usableH / _frets;
     final double nutY    = topPad;
 
-    // ── Nut ──────────────────────────────────────────────────────────────
+    // ── Nut ─────────────────────────────────────────────────────────────
     canvas.drawLine(
       Offset(leftPad, nutY),
       Offset(leftPad + usableW, nutY),
@@ -185,7 +183,7 @@ class _InteractivePainter extends CustomPainter {
       );
     }
 
-    // ── Label nomor fret (kalau bukan open position) ──────────────────────
+    // ── Label nomor fret (kalau bukan open position) ─────────────────────
     if (baseFret > 1) {
       _drawText(
         canvas,
@@ -201,10 +199,20 @@ class _InteractivePainter extends CustomPainter {
     }
 
     // ── Simbol X / O di atas senar ────────────────────────────────────────
+    // Logika: jika string di-mute → X merah
+    //         jika string open (tidak ada dot) → ○ putih transparan
+    //         jika ada dot → tidak tampilkan simbol atas
+    final stringsDotted = <int>{};
+    for (final d in placedDots) {
+      if (d.fret >= baseFret && d.fret < baseFret + _frets) {
+        stringsDotted.add(d.string);
+      }
+    }
+
     for (int i = 0; i < _strings; i++) {
-      final dx       = leftPad + i * strSp;
-      final hasDot   = placedDots.any((d) => d.string == i);
-      final isMuted  = mutedStrings[i];
+      final dx      = leftPad + i * strSp;
+      final isMuted = mutedStrings[i];
+      final hasDot  = stringsDotted.contains(i);
 
       if (isMuted) {
         _drawText(
@@ -217,18 +225,17 @@ class _InteractivePainter extends CustomPainter {
           centerX: true, centerY: true,
         );
       } else if (!hasDot) {
+        // Open string
         _drawText(
           canvas, '○',
           Offset(dx, nutY - 14),
-          TextStyle(
-              color: Colors.white.withValues(alpha: 0.3),
-              fontSize: 14),
+          TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 14),
           centerX: true, centerY: true,
         );
       }
     }
 
-    // ── Highlight sel aktif (guide visual) ───────────────────────────────
+    // ── Highlight tap-area (guide visual halus) ───────────────────────────
     final gridPaint = Paint()
       ..color = Colors.white.withValues(alpha: 0.015)
       ..style = PaintingStyle.fill;
@@ -247,23 +254,26 @@ class _InteractivePainter extends CustomPainter {
     }
 
     // ── Dots user ─────────────────────────────────────────────────────────
-    for (int idx = 0; idx < placedDots.length; idx++) {
-      final dot = placedDots[idx];
+    int dotIdx = 0;
+    for (final dot in placedDots) {
+      // Hanya render dot yang ada di range fret yang ditampilkan
       final int row = dot.fret - baseFret;
-      if (row < 0 || row >= _frets) continue;
+      if (row < 0 || row >= _frets) {
+        dotIdx++;
+        continue;
+      }
 
       final double dx = leftPad + dot.string * strSp;
       final double dy = nutY + (row + 0.5) * fretSp;
 
-      // Warna: review mode pakai warna benar/salah, normal pakai warna jari
       Color color;
       if (reviewMode && reviewColors.containsKey(dot.string)) {
         color = reviewColors[dot.string]!;
       } else {
-        color = _dotColor(idx);
+        color = _dotColor(dotIdx);
       }
 
-      // Glow ring — sama dengan fretboard_widget
+      // Glow ring
       canvas.drawCircle(
         Offset(dx, dy), 16,
         Paint()
@@ -272,9 +282,9 @@ class _InteractivePainter extends CustomPainter {
       );
       // Dot utama
       canvas.drawCircle(Offset(dx, dy), 13, Paint()..color = color);
-      // Nomor urut
+      // Nomor jari (1-based dari urutan penempatan)
       _drawText(
-        canvas, '${idx + 1}',
+        canvas, '${dotIdx + 1}',
         Offset(dx, dy),
         const TextStyle(
             color: Colors.black,
@@ -282,6 +292,8 @@ class _InteractivePainter extends CustomPainter {
             fontWeight: FontWeight.bold),
         centerX: true, centerY: true,
       );
+
+      dotIdx++;
     }
   }
 
