@@ -30,7 +30,11 @@ class _MetronomePageState extends State<MetronomePage>
   Timer? _ticker;
 
   // ── Audio ──────────────────────────────────────────
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  // Dua player terpisah: accent (beat 1) dan normal.
+  // Source di-set sekali di initState → tidak buat decoder baru tiap beat.
+  final AudioPlayer _accentPlayer = AudioPlayer();
+  final AudioPlayer _normalPlayer = AudioPlayer();
+  bool _audioReady = false;
 
   // ── Animations ─────────────────────────────────────
   late AnimationController _pendulumController;
@@ -48,9 +52,6 @@ class _MetronomePageState extends State<MetronomePage>
   @override
   void initState() {
     super.initState();
-
-    // Siapkan audio player — low latency mode
-    _audioPlayer.setReleaseMode(ReleaseMode.stop);
 
     _pendulumController = AnimationController(
       vsync: this,
@@ -74,12 +75,37 @@ class _MetronomePageState extends State<MetronomePage>
       parent: _beatFlashController,
       curve: Curves.easeOut,
     );
+
+    _initAudio();
+  }
+
+  // Pre-load audio sekali — tidak di-reload tiap beat
+  Future<void> _initAudio() async {
+    try {
+      await _accentPlayer.setPlayerMode(PlayerMode.lowLatency);
+      await _normalPlayer.setPlayerMode(PlayerMode.lowLatency);
+
+      await _accentPlayer.setReleaseMode(ReleaseMode.stop);
+      await _normalPlayer.setReleaseMode(ReleaseMode.stop);
+
+      await _accentPlayer.setVolume(1.0);
+      await _normalPlayer.setVolume(0.45);
+
+      // setSource sekali → decoder dibuat sekali, resume() berikutnya cepat
+      await _accentPlayer.setSource(AssetSource('audio/Metronome.mp3'));
+      await _normalPlayer.setSource(AssetSource('audio/Metronome.mp3'));
+
+      if (mounted) setState(() => _audioReady = true);
+    } catch (_) {
+      // Audio gagal tersedia — metronome tetap jalan tanpa suara
+    }
   }
 
   @override
   void dispose() {
     _ticker?.cancel();
-    _audioPlayer.dispose();
+    _accentPlayer.dispose();
+    _normalPlayer.dispose();
     _pendulumController.dispose();
     _pulseController.dispose();
     _beatFlashController.dispose();
@@ -132,22 +158,19 @@ class _MetronomePageState extends State<MetronomePage>
     _ticker = Timer.periodic(_beatInterval, (_) => _onBeat());
   }
 
-  void _stopTicker() {
-    _ticker?.cancel();
-    _ticker = null;
-    _pendulumController.stop();
-    _pendulumController.reset();
-    setState(() => _currentBeat = 0);
-  }
-
+  // resume() jauh lebih ringan daripada play(AssetSource(...))
+  // karena tidak membuat MediaCodec baru tiap beat
   Future<void> _playTick(bool isAccent) async {
+    if (!_audioReady) return;
     try {
-      // Set volume: accent (beat 1) = 1.0, normal = 0.4
-      await _audioPlayer.setVolume(isAccent ? 1.0 : 0.4);
-      await _audioPlayer.play(AssetSource('audio/Metronome.mp3'));
-    } catch (_) {
-      // Kalau audio gagal, tetap lanjut tanpa crash
-    }
+      if (isAccent) {
+        await _accentPlayer.stop();
+        await _accentPlayer.resume();
+      } else {
+        await _normalPlayer.stop();
+        await _normalPlayer.resume();
+      }
+    } catch (_) {}
   }
 
   void _onBeat() {
@@ -156,10 +179,8 @@ class _MetronomePageState extends State<MetronomePage>
     final nextBeat = (_currentBeat % _beatsPerMeasure) + 1;
     final isAccent = nextBeat == 1;
 
-    // Mainkan suara
     _playTick(isAccent);
 
-    // Haptic feedback
     if (isAccent) {
       HapticFeedback.mediumImpact();
     } else {
@@ -172,11 +193,18 @@ class _MetronomePageState extends State<MetronomePage>
     });
   }
 
+  void _stopTicker() {
+    _ticker?.cancel();
+    _ticker = null;
+    _pendulumController.stop();
+    _pendulumController.reset();
+    setState(() => _currentBeat = 0);
+  }
+
   // ── Tap Tempo ──────────────────────────────────────
   void _handleTapTempo() {
     final now = DateTime.now().millisecondsSinceEpoch;
 
-    // Reset kalau jeda dari tap terakhir > 2 detik
     if (_tapTimes.isNotEmpty && now - _tapTimes.last > 2000) {
       _tapTimes.clear();
     }
@@ -381,7 +409,6 @@ class _MetronomePageState extends State<MetronomePage>
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  // Dial background painter
                   AnimatedBuilder(
                     animation: _pulseAnim,
                     builder: (context, _) => CustomPaint(
@@ -396,7 +423,6 @@ class _MetronomePageState extends State<MetronomePage>
                     ),
                   ),
 
-                  // Pendulum line
                   if (_isPlaying)
                     AnimatedBuilder(
                       animation: _pendulumController,
@@ -426,7 +452,6 @@ class _MetronomePageState extends State<MetronomePage>
                       },
                     ),
 
-                  // Play/Stop button
                   AnimatedBuilder(
                     animation: _beatFlashAnim,
                     builder: (context, _) {
@@ -473,7 +498,6 @@ class _MetronomePageState extends State<MetronomePage>
                     },
                   ),
 
-                  // Tempo label
                   Positioned(
                     top: size * 0.12,
                     child: Text(
@@ -486,7 +510,6 @@ class _MetronomePageState extends State<MetronomePage>
                     ),
                   ),
 
-                  // Label 30 — posisi startAngle
                   Positioned(
                     left:
                         size * 0.5 +
@@ -498,7 +521,6 @@ class _MetronomePageState extends State<MetronomePage>
                         8,
                     child: _dialLabel('30'),
                   ),
-                  // Label 65
                   Positioned(
                     left:
                         size * 0.5 +
@@ -512,7 +534,6 @@ class _MetronomePageState extends State<MetronomePage>
                         8,
                     child: _dialLabel('65'),
                   ),
-                  // Label 205
                   Positioned(
                     left:
                         size * 0.5 +
@@ -530,7 +551,6 @@ class _MetronomePageState extends State<MetronomePage>
                         8,
                     child: _dialLabel('205'),
                   ),
-                  // Label 240 — posisi endAngle
                   Positioned(
                     left:
                         size * 0.5 +
@@ -787,7 +807,6 @@ class _DialPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2 - 10;
 
-    // ── Track arc (background) ──────────────────────
     canvas.drawCircle(
       center,
       radius,
@@ -797,7 +816,6 @@ class _DialPainter extends CustomPainter {
         ..strokeWidth = 2,
     );
 
-    // ── Tick marks ──────────────────────────────────
     const totalTicks = 120;
     const startAngle = math.pi * 0.7;
     const sweepAngle = math.pi * 1.6;
@@ -831,11 +849,8 @@ class _DialPainter extends CustomPainter {
       );
     }
 
-    // ── Progress arc ────────────────────────────────
     final bpmProgress = (bpm - minBpm) / (maxBpm - minBpm);
     final progressSweep = sweepAngle * bpmProgress;
-
-    // Minimum sweep agar SweepGradient tidak crash saat bpm = min
     final safeSweep = progressSweep < 0.001 ? 0.001 : progressSweep;
 
     final arcPaint = Paint()
@@ -854,7 +869,6 @@ class _DialPainter extends CustomPainter {
         transform: GradientRotation(startAngle),
       ).createShader(Rect.fromCircle(center: center, radius: radius - 3));
 
-    // Hanya gambar arc kalau ada progress nyata
     if (progressSweep > 0.001) {
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius - 3),
@@ -865,14 +879,12 @@ class _DialPainter extends CustomPainter {
       );
     }
 
-    // ── Indicator knob ──────────────────────────────
     final knobAngle = startAngle + progressSweep;
     final knobPos = Offset(
       center.dx + (radius - 3) * math.cos(knobAngle),
       center.dy + (radius - 3) * math.sin(knobAngle),
     );
 
-    // Glow
     canvas.drawCircle(
       knobPos,
       14,
@@ -880,7 +892,6 @@ class _DialPainter extends CustomPainter {
         ..color = const Color(0xFF9D00FF).withOpacity(0.2 + 0.15 * pulseValue)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
     );
-    // Border ring
     canvas.drawCircle(
       knobPos,
       10,
@@ -889,9 +900,7 @@ class _DialPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
     );
-    // Inner fill
     canvas.drawCircle(knobPos, 8, Paint()..color = const Color(0xFF1A1A2E));
-    // Dot center
     canvas.drawCircle(
       knobPos,
       3,
