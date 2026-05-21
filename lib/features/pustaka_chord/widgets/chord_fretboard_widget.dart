@@ -2,26 +2,28 @@ import 'package:flutter/material.dart';
 import '../models/chord_shape_model.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Warna jari — satu sumber kebenaran untuk Painter dan Legend
+// Warna jari
 // ─────────────────────────────────────────────────────────────────────────────
 const _kFingerColors = <int, Color>{
-  1: Color(0xFFFF4C4C), // Telunjuk   — merah
-  2: Color(0xFF4C9EFF), // Tengah     — biru
-  3: Color(0xFF00E676), // Manis      — hijau
-  4: Color(0xFFFFAA00), // Kelingking — oranye
+  1: Color(0xFFFF4C4C),
+  2: Color(0xFF4C9EFF),
+  3: Color(0xFF00E676),
+  4: Color(0xFFFFAA00),
 };
 
-Color _fingerColor(int finger) {
-  if (!_kFingerColors.containsKey(finger)) {
-    return Colors.grey; // fallback aman (bukan cyan/pink lagi)
-  }
-  return _kFingerColors[finger]!;
-}
+Color _fingerColor(int finger) => _kFingerColors[finger] ?? Colors.grey;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Widget utama
+//
+// PERUBAHAN dari versi sebelumnya:
+//   • StatefulWidget → StatelessWidget — tidak ada AnimationController per-instance.
+//     Animasi scale ditangani oleh parent (FadeTransition/ScaleTransition) kalau
+//     diperlukan, bukan dibuat di setiap leaf widget.
+//   • RepaintBoundary membungkus CustomPaint → hanya chord yang berubah yang
+//     di-repaint, bukan seluruh GridView.
 // ─────────────────────────────────────────────────────────────────────────────
-class ChordFretboardWidget extends StatefulWidget {
+class ChordFretboardWidget extends StatelessWidget {
   final ChordShapeModel shape;
   final String chordName;
 
@@ -32,112 +34,67 @@ class ChordFretboardWidget extends StatefulWidget {
   });
 
   @override
-  State<ChordFretboardWidget> createState() => _ChordFretboardWidgetState();
-}
-
-class _ChordFretboardWidgetState extends State<ChordFretboardWidget>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnim;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 380),
-    );
-    _scaleAnim = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutBack,
-    );
-
-    // Jalankan setelah frame pertama — painter sudah punya size valid
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _controller.forward();
-    });
-  }
-
-  @override
-  void didUpdateWidget(ChordFretboardWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.shape != widget.shape) {
-      _controller.reset();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _controller.forward();
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return ScaleTransition(
-      scale: _scaleAnim,
-      child: Container(
-        width: 280,
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF111111),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: Colors.cyanAccent.withOpacity(0.3),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.cyanAccent.withOpacity(0.08),
-              blurRadius: 30,
-              spreadRadius: 2,
-            ),
-          ],
+    return Container(
+      width: 280,
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.cyanAccent.withOpacity(0.3),
+          width: 1,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (widget.chordName.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Text(
-                  widget.chordName,
-                  style: const TextStyle(
-                    color: Colors.cyanAccent,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2,
-                  ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.cyanAccent.withOpacity(0.08),
+            blurRadius: 30,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (chordName.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text(
+                chordName,
+                style: const TextStyle(
+                  color: Colors.cyanAccent,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2,
                 ),
               ),
-            _buildTopRow(),
-            const SizedBox(height: 4),
-            // Painter tidak menerima progress — dots selalu full size.
-            // Efek animasi sepenuhnya di ScaleTransition di atas.
-            SizedBox(
+            ),
+          _buildTopRow(),
+          const SizedBox(height: 4),
+          // RepaintBoundary → painter hanya repaint saat shape berubah,
+          // tidak ikut rebuild parent (scroll, setState lain, dsb)
+          RepaintBoundary(
+            child: SizedBox(
               height: 220,
               child: CustomPaint(
                 size: const Size(double.infinity, 220),
-                painter: _FretboardPainter(shape: widget.shape),
+                painter: _FretboardPainter(shape: shape),
               ),
             ),
-            const SizedBox(height: 10),
-            _buildFingerLegend(),
-          ],
-        ),
+          ),
+          const SizedBox(height: 10),
+          _buildFingerLegend(),
+        ],
       ),
     );
   }
 
-  // ── Baris X / O ──────────────────────────────────────────────────────────
+  // ── Baris X / O ────────────────────────────────────────────────────────
   Widget _buildTopRow() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: List.generate(6, (i) {
-        final fret = widget.shape.frets[i];
+        final fret = shape.frets[i];
         String symbol = '';
         Color color = Colors.white70;
         if (fret == -1) {
@@ -165,25 +122,23 @@ class _ChordFretboardWidgetState extends State<ChordFretboardWidget>
     );
   }
 
-  // ── Legend jari ──────────────────────────────────────────────────────────
+  // ── Legend jari ────────────────────────────────────────────────────────
   Widget _buildFingerLegend() {
     final usedFingers = <int>{};
 
-    // Selalu masukkan jari 1 jika ada barre
-    if (widget.shape.barreFret != null) usedFingers.add(1);
+    if (shape.barreFret != null) usedFingers.add(1);
 
-    for (int i = 0; i < widget.shape.fingers.length; i++) {
-      final f = widget.shape.fingers[i];
-      if (f <= 0 || widget.shape.frets[i] <= 0) continue;
+    for (int i = 0; i < shape.fingers.length; i++) {
+      final f = shape.fingers[i];
+      if (f <= 0 || shape.frets[i] <= 0) continue;
 
-      // Lewati jika sudah tercakup barre
       final isBarre =
-          widget.shape.barreFret != null &&
-          widget.shape.frets[i] == widget.shape.barreFret &&
-          widget.shape.barreStartString != null &&
-          widget.shape.barreEndString != null &&
-          i >= widget.shape.barreStartString! &&
-          i <= widget.shape.barreEndString!;
+          shape.barreFret != null &&
+          shape.frets[i] == shape.barreFret &&
+          shape.barreStartString != null &&
+          shape.barreEndString != null &&
+          i >= shape.barreStartString! &&
+          i <= shape.barreEndString!;
 
       if (!isBarre) usedFingers.add(f);
     }
@@ -242,7 +197,7 @@ class _ChordFretboardWidgetState extends State<ChordFretboardWidget>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Painter — tidak menerima progress, dots selalu full size
+// Painter
 // ─────────────────────────────────────────────────────────────────────────────
 class _FretboardPainter extends CustomPainter {
   final ChordShapeModel shape;
@@ -266,7 +221,6 @@ class _FretboardPainter extends CustomPainter {
     final double nutY = topPad;
     final int startFret = shape.baseFret;
 
-    // ── Nut ───────────────────────────────────────────────────────────────
     canvas.drawLine(
       Offset(leftPad, nutY),
       Offset(leftPad + usableW, nutY),
@@ -275,7 +229,6 @@ class _FretboardPainter extends CustomPainter {
         ..strokeWidth = startFret == 1 ? 5.0 : 1.5,
     );
 
-    // ── Garis fret ────────────────────────────────────────────────────────
     final fretPaint = Paint()
       ..color = Colors.white24
       ..strokeWidth = 1.0;
@@ -288,7 +241,6 @@ class _FretboardPainter extends CustomPainter {
       );
     }
 
-    // ── Senar (string 0 = low E, makin ke kanan makin tipis pitch) ────────
     for (int i = 0; i < _strings; i++) {
       final dx = leftPad + i * strSp;
       canvas.drawLine(
@@ -300,7 +252,6 @@ class _FretboardPainter extends CustomPainter {
       );
     }
 
-    // ── Label nomor fret (kalau bukan open position) ───────────────────────
     if (startFret > 1) {
       _drawText(
         canvas,
@@ -315,7 +266,6 @@ class _FretboardPainter extends CustomPainter {
       );
     }
 
-    // ── Barre bar ─────────────────────────────────────────────────────────
     if (shape.barreFret != null &&
         shape.barreStartString != null &&
         shape.barreEndString != null) {
@@ -324,9 +274,8 @@ class _FretboardPainter extends CustomPainter {
         final double dy = nutY + (row + 0.5) * fretSp;
         final double xStart = leftPad + shape.barreStartString! * strSp;
         final double xEnd = leftPad + shape.barreEndString! * strSp;
-        const Color barreCol = Color(0xFFFF4C4C); // merah telunjuk
+        const Color barreCol = Color(0xFFFF4C4C);
 
-        // Glow
         canvas.drawRRect(
           RRect.fromRectAndRadius(
             Rect.fromPoints(
@@ -340,7 +289,6 @@ class _FretboardPainter extends CustomPainter {
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
         );
 
-        // Bar utama
         canvas.drawRRect(
           RRect.fromRectAndRadius(
             Rect.fromPoints(
@@ -354,7 +302,6 @@ class _FretboardPainter extends CustomPainter {
             ..style = PaintingStyle.fill,
         );
 
-        // Angka "1" di tengah barre (telunjuk)
         _drawText(
           canvas,
           '1',
@@ -370,7 +317,6 @@ class _FretboardPainter extends CustomPainter {
       }
     }
 
-    // ── Dots jari ─────────────────────────────────────────────────────────
     for (int i = 0; i < _strings; i++) {
       final int absFret = shape.frets[i];
       if (absFret <= 0) continue;
@@ -378,7 +324,6 @@ class _FretboardPainter extends CustomPainter {
       final int row = absFret - startFret;
       if (row < 0 || row >= _frets) continue;
 
-      // Lewati string yang sudah dicakup barre
       if (shape.barreFret != null &&
           absFret == shape.barreFret &&
           shape.barreStartString != null &&
@@ -394,7 +339,6 @@ class _FretboardPainter extends CustomPainter {
       final double dx = leftPad + i * strSp;
       final double dy = nutY + (row + 0.5) * fretSp;
 
-      // Glow ring
       canvas.drawCircle(
         Offset(dx, dy),
         16,
@@ -403,10 +347,8 @@ class _FretboardPainter extends CustomPainter {
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
       );
 
-      // Dot utama
       canvas.drawCircle(Offset(dx, dy), 13, Paint()..color = color);
 
-      // Nomor jari
       if (safeFinger > 0) {
         _drawText(
           canvas,

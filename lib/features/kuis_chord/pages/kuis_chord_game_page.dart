@@ -6,7 +6,7 @@ import '../../pustaka_chord/data/chord_library.dart';
 import '../../pustaka_chord/models/chord_model.dart';
 import '../../pustaka_chord/widgets/chord_fretboard_widget.dart';
 import '../models/quiz_level_model.dart';
-import '../services/quiz_audio_service.dart';
+import '../../../core/services/quiz_audio_service.dart';
 import '../widgets/kuis_progress_bar.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
