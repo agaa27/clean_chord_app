@@ -84,7 +84,9 @@ bool _validate({
 }) {
   final target = _chordNotes(chord);
   if (target.isEmpty) return false;
+  if (dots.isEmpty) return false;
 
+<<<<<<< HEAD
   // Kumpulkan semua nada yang terdengar:
   // 1. Nada dari dot yang dipasang (fret > 0, string tidak di-mute)
   // 2. Nada open string yang tidak di-mute DAN tidak punya dot
@@ -111,6 +113,21 @@ bool _validate({
 
   // Semua nada chord harus tercakup — extra note tidak masalah
   return target.every((n) => playedNotes.contains(n));
+=======
+  // Kumpulkan nada HANYA dari dot yang dipasang user (bukan open string)
+  final dotNotes = <String>{};
+  for (final d in dots) {
+    if (!muted[d.string]) {
+      dotNotes.add(_note(d.string, d.fret));
+    }
+  }
+
+  if (dotNotes.isEmpty) return false;
+
+  // Semua nada chord harus ada di dotNotes
+  // (dotNotes boleh punya nada lebih — tidak masalah)
+  return target.every((n) => dotNotes.contains(n));
+>>>>>>> 49d982d6dc9a54e51916928bec95644eae4229a4
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -282,12 +299,21 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     // FIX: filter pakai 'next', bukan _baseFret — setState synchronous jadi
     // _baseFret sudah = next saat where() dieksekusi → dot salah hilang.
     setState(() {
+<<<<<<< HEAD
+=======
+      _baseFret = next;
+>>>>>>> 49d982d6dc9a54e51916928bec95644eae4229a4
       _dots = _dots
           .where((d) => d.fret >= next && d.fret < next + 5)
           .toList();
       _baseFret = next;
     });
   }
+<<<<<<< HEAD
+=======
+
+  // ── Interaksi fretboard ───────────────────────────────────────────────────
+>>>>>>> 49d982d6dc9a54e51916928bec95644eae4229a4
   //
   // Aturan tap:
   //   • Tap sel yang sudah ada dot → HAPUS dot itu (toggle off)
@@ -327,8 +353,12 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
   // ── Submit ────────────────────────────────────────────────────────────────
   void _submit() {
     if (_isReviewing || _chord == null) return;
+<<<<<<< HEAD
     // FIX: JANGAN cancel timer global di sini — timer countdown harus terus jalan.
     // Timer hanya di-cancel saat game over / reset / exit.
+=======
+    _timer?.cancel();
+>>>>>>> 49d982d6dc9a54e51916928bec95644eae4229a4
 
     final ok = _validate(chord: _chord!, dots: _dots, muted: _muted);
 
@@ -344,13 +374,24 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     // tidak ada window di mana flag belum di-reset tapi Future sudah terjadwal.
     _reviewCompleted = false;
     setState(() {
+<<<<<<< HEAD
       _isReviewing = true;
       _isCorrect   = ok;
+=======
+      _isReviewing     = true;
+      _isCorrect       = ok;
+      _reviewCompleted = false;
+>>>>>>> 49d982d6dc9a54e51916928bec95644eae4229a4
       if (ok) _score++;
     });
     _resultCtrl.reset();
     _resultCtrl.forward();
 
+<<<<<<< HEAD
+=======
+    // Benar → 2 detik, Salah → 9 detik (user sempat buka panel referensi)
+    // User juga bisa tap "Lanjut →" untuk skip manual
+>>>>>>> 49d982d6dc9a54e51916928bec95644eae4229a4
     final delay = ok
         ? const Duration(milliseconds: 2000)
         : const Duration(milliseconds: 9000);
@@ -361,6 +402,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     });
   }
 
+<<<<<<< HEAD
   // ── Skip review (jawaban salah) ───────────────────────────────────────────
   void _skipReview() {
     if (!_isReviewing || _isCorrect || _reviewCompleted) return;
@@ -374,6 +416,18 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
   void _nextQuestion() {
     // FIX: guard ganda — pastikan tidak dipanggil dua kali
     if (!mounted || _isGameOver) return;
+=======
+  // Skip review saat jawaban salah (tap tombol "Lanjut →")
+  void _skipReview() {
+    if (!_isReviewing || _isCorrect || _reviewCompleted) return;
+    setState(() => _reviewCompleted = true);
+    _nextQuestion();
+  }
+
+  // Pindah ke soal berikutnya atau tampilkan dialog menang
+  // CATATAN: tidak memanggil _startTimer() — timer global terus berjalan
+  void _nextQuestion() {
+>>>>>>> 49d982d6dc9a54e51916928bec95644eae4229a4
     _questionIdx++;
     if (_questionIdx >= widget.level.targetPoints) {
       Future.delayed(const Duration(milliseconds: 300), () {
@@ -384,6 +438,10 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
       });
     } else {
       _pickQuestion();
+<<<<<<< HEAD
+=======
+      // Timer sudah berjalan dari _startGame() — tidak perlu restart
+>>>>>>> 49d982d6dc9a54e51916928bec95644eae4229a4
     }
   }
 

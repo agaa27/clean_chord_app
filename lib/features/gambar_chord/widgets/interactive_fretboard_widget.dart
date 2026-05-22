@@ -87,6 +87,7 @@ class InteractiveFretboardWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (ctx, constraints) {
+<<<<<<< HEAD
       const double leftPad   = 24.0;
       const double rightPad  = 10.0;
       // topPad = 8 identik dengan ChordFretboard painter.
@@ -94,12 +95,19 @@ class InteractiveFretboardWidget extends StatelessWidget {
       // persis seperti ChordFretboardWidget._buildTopRow().
       const double topPad    = 8.0;
       const double bottomPad = 4.0;
+=======
+      const leftPad   = 24.0;
+      const rightPad  = 10.0;
+      const topPad    = 20.0; // ruang untuk simbol X / O di atas nut
+      const bottomPad = 4.0;
+>>>>>>> 49d982d6dc9a54e51916928bec95644eae4229a4
 
       final usableW = constraints.maxWidth  - leftPad - rightPad;
       final usableH = constraints.maxHeight - topPad  - bottomPad;
       final strSp   = usableW / (_strings - 1);
       final fretSp  = usableH / _frets;
 
+<<<<<<< HEAD
       return Column(
         children: [
           // ── Baris X / O — identik dengan ChordFretboard._buildTopRow ───
@@ -128,6 +136,24 @@ class InteractiveFretboardWidget extends StatelessWidget {
                 ),
               );
             }),
+=======
+      return GestureDetector(
+        onTapUp: (d) {
+          final hit = _hit(
+              d.localPosition, leftPad, topPad, strSp, fretSp);
+          if (hit == null) return;
+          HapticFeedback.selectionClick();
+          onTap(hit.string, hit.fret);
+        },
+        child: CustomPaint(
+          size: Size(constraints.maxWidth, constraints.maxHeight),
+          painter: _FretboardPainter(
+            placedDots:   placedDots,
+            mutedStrings: mutedStrings,
+            baseFret:     baseFret,
+            reviewMode:   reviewMode,
+            reviewColors: reviewColors,
+>>>>>>> 49d982d6dc9a54e51916928bec95644eae4229a4
           ),
           const SizedBox(height: 2),
           // ── Fretboard painter ──────────────────────────────────────────
@@ -178,12 +204,18 @@ class _FretboardPainter extends CustomPainter {
 
   static const _strings = 6;
   static const _frets   = 5;
+<<<<<<< HEAD
   // Padding IDENTIK dengan ChordFretboard painter
   // topPad = 8 karena simbol X/O sekarang ada di Widget terpisah (_buildTopRow),
   // bukan di dalam painter — persis seperti ChordFretboardWidget
   static const leftPad   = 24.0;
   static const rightPad  = 10.0;
   static const topPad    = 8.0;
+=======
+  static const leftPad   = 24.0;
+  static const rightPad  = 10.0;
+  static const topPad    = 20.0;
+>>>>>>> 49d982d6dc9a54e51916928bec95644eae4229a4
   static const bottomPad = 4.0;
 
   @override
@@ -234,9 +266,40 @@ class _FretboardPainter extends CustomPainter {
           cx: false, cy: true);
     }
 
+<<<<<<< HEAD
     // X/O sudah dirender di Widget Row terpisah di atas painter.
     // Painter tidak perlu render X/O — identik dengan ChordFretboard.
 
+=======
+    // ── Simbol X / O di atas nut ────────────────────────────────────────
+    // X = muted, O = open string aktif
+    // Jika ada dot → tidak tampilkan simbol (dot sudah cukup informatif)
+    final stringsDotted = <int>{};
+    for (final d in placedDots) {
+      final row = d.fret - baseFret;
+      if (row >= 0 && row < _frets) stringsDotted.add(d.string);
+    }
+
+    for (int i = 0; i < _strings; i++) {
+      final dx = leftPad + i * strSp;
+      if (mutedStrings[i]) {
+        _text(canvas, '✕', Offset(dx, nutY - 12),
+            const TextStyle(color: Colors.redAccent,
+                fontSize: 13, fontWeight: FontWeight.bold),
+            cx: true, cy: true);
+      } else if (!stringsDotted.contains(i)) {
+        // open string — lebih terang saat review
+        final alpha = reviewMode ? 0.6 : 0.25;
+        final color = reviewMode && reviewColors.containsKey(i)
+            ? reviewColors[i]!.withValues(alpha: alpha)
+            : Colors.white.withValues(alpha: alpha);
+        _text(canvas, '○', Offset(dx, nutY - 12),
+            TextStyle(color: color, fontSize: 13),
+            cx: true, cy: true);
+      }
+    }
+
+>>>>>>> 49d982d6dc9a54e51916928bec95644eae4229a4
     // ── Grid tap-area (hint visual halus) ──────────────────────────────
     final gridPaint = Paint()
       ..color = Colors.white.withValues(alpha: 0.018)
@@ -254,6 +317,7 @@ class _FretboardPainter extends CustomPainter {
       }
     }
 
+<<<<<<< HEAD
     // ── Barre bar ────────────────────────────────────────────────────────
     final fretCount = <int, List<int>>{};
     for (final d in placedDots) {
@@ -348,17 +412,49 @@ class _FretboardPainter extends CustomPainter {
       final dx = leftPad + dot.string * strSp;
       final dy = nutY + (row + 0.5) * fretSp;
 
+=======
+    // ── Dots ────────────────────────────────────────────────────────────
+    //
+    // Nomor di dot mengikuti urutan POSISI (fret rendah dulu → string rendah),
+    // bukan urutan input user. Konsisten dengan diagram chord standar.
+    //
+    final sortedByPos = List<FingerPosition>.from(placedDots)
+      ..sort((a, b) {
+        final ra = a.fret - baseFret;
+        final rb = b.fret - baseFret;
+        return ra != rb ? ra.compareTo(rb) : a.string.compareTo(b.string);
+      });
+    final fingerNum = <FingerPosition, int>{};
+    for (int n = 0; n < sortedByPos.length; n++) {
+      fingerNum[sortedByPos[n]] = n + 1;
+    }
+
+    for (int i = 0; i < placedDots.length; i++) {
+      final dot = placedDots[i];
+      final row = dot.fret - baseFret;
+      if (row < 0 || row >= _frets) continue;
+
+      final dx = leftPad + dot.string * strSp;
+      final dy = nutY + (row + 0.5) * fretSp;
+
+      // Pilih warna: review → dari reviewColors, normal → cycle warna
+>>>>>>> 49d982d6dc9a54e51916928bec95644eae4229a4
       final Color color;
       if (reviewMode && reviewColors.containsKey(dot.string)) {
         color = reviewColors[dot.string]!;
       } else {
+<<<<<<< HEAD
         color = _dotColor(fingerNum[dot] ?? 1);
+=======
+        color = _dotColor(i);
+>>>>>>> 49d982d6dc9a54e51916928bec95644eae4229a4
       }
 
       // Glow
       canvas.drawCircle(Offset(dx, dy), 16,
           Paint()
             ..color      = color.withValues(alpha: 0.25)
+<<<<<<< HEAD
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
       // Dot
       canvas.drawCircle(Offset(dx, dy), 13, Paint()..color = color);
@@ -366,6 +462,17 @@ class _FretboardPainter extends CustomPainter {
       final num = fingerNum[dot] ?? 1;
       _text(canvas, '$num', Offset(dx, dy),
           const TextStyle(color: Colors.black, fontSize: 12,
+=======
+            ..maskFilter =
+                const MaskFilter.blur(BlurStyle.normal, 6));
+      // Dot
+      canvas.drawCircle(Offset(dx, dy), 13, Paint()..color = color);
+      // Nomor berdasarkan urutan posisi (bukan urutan input)
+      final num = fingerNum[dot] ?? (i + 1);
+      _text(canvas, '$num', Offset(dx, dy),
+          const TextStyle(
+              color: Colors.black, fontSize: 12,
+>>>>>>> 49d982d6dc9a54e51916928bec95644eae4229a4
               fontWeight: FontWeight.bold),
           cx: true, cy: true);
     }
@@ -391,4 +498,8 @@ class _FretboardPainter extends CustomPainter {
       o.baseFret     != baseFret     ||
       o.reviewMode   != reviewMode   ||
       o.reviewColors != reviewColors;
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 49d982d6dc9a54e51916928bec95644eae4229a4
