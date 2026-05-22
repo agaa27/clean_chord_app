@@ -8,6 +8,7 @@ import '../../pustaka_chord/widgets/chord_fretboard_widget.dart';
 import '../models/gambar_level_model.dart';
 import '../services/quiz_audio_service.dart';
 import '../widgets/interactive_fretboard_widget.dart';
+import '../../../core/chord/models/finger_position.dart';
 import '../../kuis_chord/widgets/kuis_progress_bar.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -307,7 +308,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
       } else {
         // Hapus dot lama di string yang sama (kalau ada) lalu pasang di fret baru
         _dots = _dots.where((d) => d.string != string).toList();
-        _dots = [..._dots, FingerPosition(string: string, fret: fret)];
+        _dots = [..._dots, FingerPosition(string: string, fret: fret, finger: 0)];
         _muted = List.from(_muted)..[string] = false;
       }
     });
