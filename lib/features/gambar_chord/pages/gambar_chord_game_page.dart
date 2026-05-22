@@ -9,6 +9,8 @@ import '../models/gambar_level_model.dart';
 import '../services/quiz_audio_service.dart';
 import '../widgets/interactive_fretboard_widget.dart';
 import '../../../core/chord/models/finger_position.dart';
+import '../../../core/chord/models/barre_info.dart';
+import '../../../core/chord/engine/barre_inferencer.dart';
 import '../../kuis_chord/widgets/kuis_progress_bar.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -135,7 +137,6 @@ Map<int, Color> _buildReviewColors({
   }
   return result;
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 class GambarChordGamePage extends StatefulWidget {
@@ -179,6 +180,17 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
   late Animation<double>   _fadeAnim;
   late AnimationController _resultCtrl;
   late Animation<double>   _resultAnim;
+
+  // ── Barre inference (computed dari _dots) ────────────────────────────────
+  // Dipanggil setiap build — ringan, tidak ada I/O.
+  BarreInferenceResult get _inferredBarre =>
+      BarreInferencer.infer(_dots, baseFret: _baseFret);
+
+  // Dots yang dipakai untuk render (non-barre), sudah ada finger-nya
+  List<FingerPosition> get _renderDots => _inferredBarre.remainingDots;
+
+  // Barres aktif untuk render bar merah
+  List<BarreInfo> get _renderBarres => _inferredBarre.barres;
 
   // ── Palette ───────────────────────────────────────────────────────────────
   static const _bg     = Color(0xFF070A0F);
@@ -818,12 +830,13 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Expanded(child: InteractiveFretboardWidget(
-                      placedDots:   _dots,
+                      placedDots:   _renderDots,
                       mutedStrings: _muted,
                       onTap:        _onTap,
                       reviewMode:   _isReviewing,
                       reviewColors: revColors,
                       baseFret:     _baseFret,
+                      barres:       _renderBarres,
                     )),
                     _buildFretNav(accent),
                   ],

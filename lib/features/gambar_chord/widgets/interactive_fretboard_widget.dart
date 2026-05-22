@@ -173,7 +173,30 @@ class _FretboardPainter extends CustomPainter {
       final xStart = b.startString * ss;
       final xEnd   = b.endString   * ss;
 
-      const barreColor = Color(0xFFFF4C4C);
+      // Saat review mode: warna barre ditentukan dari reviewColors string-nya.
+      // Jika semua string barre hijau → hijau, ada satu merah → merah,
+      // tidak ada reviewColors → warna default (merah jari).
+      Color barreColor;
+      if (reviewColors.isNotEmpty) {
+        bool anyRed   = false;
+        bool anyGreen = false;
+        for (int s = b.startString; s <= b.endString; s++) {
+          final c = reviewColors[s];
+          if (c != null) {
+            if (c == const Color(0xFF00E676)) anyGreen = true;
+            else anyRed = true;
+          }
+        }
+        if (anyRed) {
+          barreColor = const Color(0xFFFF4C4C);
+        } else if (anyGreen) {
+          barreColor = const Color(0xFF00E676);
+        } else {
+          barreColor = const Color(0xFFFF4C4C);
+        }
+      } else {
+        barreColor = const Color(0xFFFF4C4C);
+      }
 
       // Glow
       canvas.drawRRect(
