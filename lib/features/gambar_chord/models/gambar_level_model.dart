@@ -25,10 +25,10 @@ class GambarLevel {
 // Mahir lebih sedikit (sudah hafal, jadi lebih menantang).
 int gambarDurationForDifficulty(String difficulty) {
   switch (difficulty) {
-    case 'Pemula':   return 120;  // was 60 — pemula butuh waktu lebih banyak
-    case 'Menengah': return 90;   // was 90 — tetap
-    case 'Mahir':    return 60;   // was 120 — mahir harus cepat
-    default:         return 120;
+    case 'Pemula':   return 40;
+    case 'Menengah': return 50;
+    case 'Mahir':    return 70;
+    default:         return 40;
   }
 }
 

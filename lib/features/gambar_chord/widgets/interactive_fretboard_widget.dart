@@ -41,7 +41,8 @@ class InteractiveFretboardWidget extends StatelessWidget {
   static const int    _frets      = 5;
   // Padding IDENTIK dengan ChordFretboardWidget._FretboardPainter
   static const double _leftPad    = 24.0;
-  static const double _rightPad   = 10.0;
+  // FIX: rightPad dinaikkan 10→18 agar dot glow (radius 16) tidak overflow kanan
+  static const double _rightPad   = 18.0;
   static const double _topPad     =  8.0;
   static const double _bottomPad  =  4.0;
 
@@ -61,6 +62,7 @@ class InteractiveFretboardWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      clipBehavior: Clip.hardEdge,   // FIX: clip agar glow/barre tidak bleeding keluar
       decoration: BoxDecoration(
         color: const Color(0xFF111111),
         borderRadius: BorderRadius.circular(24),
@@ -184,7 +186,8 @@ class _InteractivePainter extends CustomPainter {
   static const int    _strings   = 6;
   static const int    _frets     = 5;
   static const double _leftPad   = 24.0;
-  static const double _rightPad  = 10.0;
+  // FIX: rightPad dinaikkan 10→18, sinkron dengan widget constants di atas
+  static const double _rightPad  = 18.0;
   static const double _topPad    =  8.0;
   static const double _bottomPad =  4.0;
 

@@ -785,6 +785,11 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                   width: 1.5,
                 ),
               ),
+              // FIX-OVERFLOW-H: Row label soal overflow horizontal saat chord name
+              // panjang (mis. "F#add9") + notes hint melebihi lebar container.
+              // Fix: Row stretch ke width parent (bukan min), notes Text dibungkus
+              // Flexible → bisa shrink + ellipsis. Chord name & label tetap ukuran
+              // penuh; hanya notes hint yang dipotong jika ruang sempit.
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -799,8 +804,14 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                   ),
                   if (!_isReviewing) ...[
                     const SizedBox(width: 10),
-                    Text(_chordNotes(_chord!).join(' '),
-                        style: TextStyle(color: accent.withValues(alpha: 0.45), fontSize: 11)),
+                    Flexible(
+                      child: Text(
+                        _chordNotes(_chord!).join(' '),
+                        style: TextStyle(color: accent.withValues(alpha: 0.45), fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
                   ],
                   if (_isReviewing) ...[
                     const SizedBox(width: 10),
@@ -843,7 +854,16 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                 ],
               )),
               if (_isReviewing && !_isCorrect && _chord != null)
-                _buildRefPanel(accent),
+                // FIX-OVERFLOW: bungkus dengan AnimatedContainer height eksplisit.
+                // Tanpa ini, Column(parent Expanded) tidak tahu berapa ruang yang
+                // diambil panel → meluap ke bawah. AnimatedContainer memberikan
+                // definite height sehingga Expanded(Row fretboard) mendapat sisa
+                // ruang yang tepat, BUKAN dibagi 50/50 seperti Flexible.
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  height: _showAnswerPanel ? 216 : 44,
+                  child: _buildRefPanel(accent),
+                ),
             ]),
           ),
         )),
@@ -1019,13 +1039,19 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
           if (_showAnswerPanel)
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-              child: SizedBox(
-                height: 160,
-                child: FittedBox(
-                  fit: BoxFit.contain,
-                  child: ChordFretboardWidget(
-                    shape: chord.shapes.first,
-                    chordName: _fmtChord(chord),
+              // FIX-OVERFLOW: tambahkan ClipRect agar glow/painter ChordFretboardWidget
+              // tidak bleeding secara visual ke luar area panel.
+              // SizedBox(h:160) sudah memberikan tight height ke FittedBox;
+              // overflow layout dicegah oleh AnimatedContainer wrapper di atasnya.
+              child: ClipRect(
+                child: SizedBox(
+                  height: 160,
+                  child: FittedBox(
+                    fit: BoxFit.contain,
+                    child: ChordFretboardWidget(
+                      shape: chord.shapes.first,
+                      chordName: _fmtChord(chord),
+                    ),
                   ),
                 ),
               ),

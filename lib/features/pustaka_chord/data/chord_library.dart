@@ -772,11 +772,6 @@ final List<ChordModel> chordLibrary = [
         fingers: [0, 0, 1, 3, 2, 4],
         baseFret: 6,
       ),
-      ChordShapeModel(
-        frets: [-1, -1, 6, 5, 4, 4],
-        fingers: [0, 0, 4, 3, 1, 2],
-        baseFret: 4,
-      ),
     ],
   ),
 

@@ -5,8 +5,8 @@ class QuizLevel {
   final List<String> chordNames;
   final String type;
   final int targetPoints;
-  final String difficulty; // 'Pemula' | 'Menengah' | 'Mahir'
-  final int timeLimitSeconds; // durasi kuis dalam detik
+  final String difficulty;
+  final int timeLimitSeconds;
 
   const QuizLevel({
     required this.id,
@@ -16,27 +16,22 @@ class QuizLevel {
     required this.type,
     required this.difficulty,
     this.targetPoints = 10,
-    this.timeLimitSeconds = 30, // default fallback
+    this.timeLimitSeconds = 30,
   });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Konvensi nama chord (harus cocok dengan formatChordName() di game page):
-//   major  → root saja       (e.g. 'C')
-//   minor  → root + 'm'      (e.g. 'Am')
-//   lainnya → root + type    (e.g. 'C7', 'Cmaj7', 'Csus4')
-// Shape yang ditampilkan selalu shapes[0] (shape pertama) agar konsisten.
-//
 // Durasi per tingkat kesulitan:
-//   Pemula   → 30 detik  (chord sedikit, sederhana)
-//   Menengah → 45 detik  (chord lebih banyak, ada kromatik & ekstensi)
-//   Mahir    → 60 detik  (chord kompleks, target poin lebih tinggi)
+//   Pemula   → 30 detik
+//   Menengah → 45 detik
+//   Mahir    → 60 detik
+//   Grand Master → 90 detik
 // ─────────────────────────────────────────────────────────────────────────────
 final List<QuizLevel> quizLevels = [
 
-  // ════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════
   //  PEMULA  — 30 detik
-  // ════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════
   const QuizLevel(
     id: 1,
     name: 'Major Dasar',
@@ -88,9 +83,9 @@ final List<QuizLevel> quizLevels = [
     timeLimitSeconds: 30,
   ),
 
-  // ════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════
   //  MENENGAH  — 45 detik
-  // ════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════
   const QuizLevel(
     id: 6,
     name: 'Major Kromatik',
@@ -172,9 +167,9 @@ final List<QuizLevel> quizLevels = [
     timeLimitSeconds: 45,
   ),
 
-  // ════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════
   //  MAHIR  — 60 detik
-  // ════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════
   const QuizLevel(
     id: 14,
     name: 'Major 7th (Natural)',
@@ -235,30 +230,48 @@ final List<QuizLevel> quizLevels = [
     targetPoints: 12,
     timeLimitSeconds: 60,
   ),
+
+  // ══════════════════════════════════════════════════════════════
+  //  GRAND MASTER — 96 chord, semua dari level 1-19 ✓
+  //  FIX: sebelumnya hanya 59 chord (37 hilang) + subtitle salah "96 total"
+  // ══════════════════════════════════════════════════════════════
   const QuizLevel(
     id: 20,
     name: 'Grand Master',
     subtitle: 'Semua jenis chord — 96 chord total',
     chordNames: [
-      // Major natural + kromatis
+      // Major natural (7)
       'C', 'D', 'E', 'F', 'G', 'A', 'B',
+      // Major kromatik (5)
       'C#', 'D#', 'F#', 'G#', 'A#',
-      // Minor natural + kromatis
+      // Minor natural (7)
       'Cm', 'Dm', 'Em', 'Fm', 'Gm', 'Am', 'Bm',
+      // Minor kromatik (5)
       'C#m', 'D#m', 'F#m', 'G#m', 'A#m',
-      // 7th
-      'C7', 'G7', 'D7', 'A7', 'E7', 'B7',
-      'C#7', 'F#7', 'G#7',
-      // maj7
-      'Cmaj7', 'Gmaj7', 'Dmaj7', 'Amaj7', 'Emaj7', 'Fmaj7',
-      // m7
-      'Cm7', 'Gm7', 'Dm7', 'Am7', 'Em7', 'Fm7',
-      // sus4
-      'Csus4', 'Gsus4', 'Dsus4', 'Asus4',
-      // add9
-      'Cadd9', 'Gadd9', 'Dadd9', 'Aadd9',
-      // power
-      'C5', 'G5', 'D5', 'A5', 'E5', 'F5',
+      // Dominant 7th natural (7)
+      'C7', 'D7', 'E7', 'F7', 'G7', 'A7', 'B7',
+      // Dominant 7th kromatik (5)
+      'C#7', 'D#7', 'F#7', 'G#7', 'A#7',
+      // Major 7th natural (7)
+      'Cmaj7', 'Dmaj7', 'Emaj7', 'Fmaj7', 'Gmaj7', 'Amaj7', 'Bmaj7',
+      // Major 7th kromatik (5)
+      'C#maj7', 'D#maj7', 'F#maj7', 'G#maj7', 'A#maj7',
+      // Minor 7th natural (7)
+      'Cm7', 'Dm7', 'Em7', 'Fm7', 'Gm7', 'Am7', 'Bm7',
+      // Minor 7th kromatik (5)
+      'C#m7', 'D#m7', 'F#m7', 'G#m7', 'A#m7',
+      // Sus4 natural (7)
+      'Csus4', 'Dsus4', 'Esus4', 'Fsus4', 'Gsus4', 'Asus4', 'Bsus4',
+      // Sus4 kromatik (5)
+      'C#sus4', 'D#sus4', 'F#sus4', 'G#sus4', 'A#sus4',
+      // Add9 natural (7)
+      'Cadd9', 'Dadd9', 'Eadd9', 'Fadd9', 'Gadd9', 'Aadd9', 'Badd9',
+      // Add9 kromatik (5)
+      'C#add9', 'D#add9', 'F#add9', 'G#add9', 'A#add9',
+      // Power chord natural (7)
+      'C5', 'D5', 'E5', 'F5', 'G5', 'A5', 'B5',
+      // Power chord kromatik (5)
+      'C#5', 'D#5', 'F#5', 'G#5', 'A#5',
     ],
     type: 'mixed',
     difficulty: 'Mahir',

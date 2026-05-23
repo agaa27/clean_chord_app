@@ -166,6 +166,8 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
       .toList();
 
   void _generateQuestion() {
+    // FIX: guard race condition — timer habis saat Future.delayed 750ms masih pending
+    if (_isGameOver) return;
     final valid = _validChords;
     if (valid.isEmpty) return;
 
@@ -253,17 +255,17 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
   Color _btnBg(String option) {
     if (_selectedAnswer == null) return _card;
     final c = formatChordName(_currentChord!);
-    if (option == c)               return _correct.withOpacity(0.15);
-    if (option == _selectedAnswer) return _wrong.withOpacity(0.15);
+    if (option == c)               return _correct.withValues(alpha: 0.15);
+    if (option == _selectedAnswer) return _wrong.withValues(alpha: 0.15);
     return _card;
   }
 
   Color _btnBorder(String option) {
-    if (_selectedAnswer == null) return Colors.white.withOpacity(0.1);
+    if (_selectedAnswer == null) return Colors.white.withValues(alpha: 0.1);
     final c = formatChordName(_currentChord!);
     if (option == c)               return _correct;
     if (option == _selectedAnswer) return _wrong;
-    return Colors.white.withOpacity(0.05);
+    return Colors.white.withValues(alpha: 0.05);
   }
 
   Color _btnText(String option) {
@@ -336,46 +338,55 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
         canPop: false,
         child: Dialog(
           backgroundColor: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0D1520),
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: titleColor.withOpacity(0.4), width: 1.5),
-              boxShadow: [
-                BoxShadow(
-                  color: titleColor.withOpacity(0.15),
-                  blurRadius: 30,
-                  spreadRadius: 2,
-                ),
-              ],
+          // FIX: bungkus dengan ConstrainedBox agar dialog tidak overflow
+          // di device kecil, lalu SingleChildScrollView agar konten scrollable
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.85,
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(icon, style: const TextStyle(fontSize: 44)),
-                const SizedBox(height: 12),
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: titleColor,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
+            child: Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0D1520),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(color: titleColor.withValues(alpha: 0.4), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: titleColor.withValues(alpha: 0.15),
+                    blurRadius: 30,
+                    spreadRadius: 2,
                   ),
+                ],
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(icon, style: const TextStyle(fontSize: 44)),
+                    const SizedBox(height: 12),
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: titleColor,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      message,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    ...actions,
+                  ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 14,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 22),
-                ...actions,
-              ],
+              ),
             ),
           ),
         ),
@@ -393,7 +404,7 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
           height: 46,
           child: OutlinedButton(
             style: OutlinedButton.styleFrom(
-              side: BorderSide(color: color.withOpacity(0.6)),
+              side: BorderSide(color: color.withValues(alpha: 0.6)),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(23),
               ),
@@ -469,9 +480,9 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: accent.withOpacity(0.08),
+                      color: accent.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: accent.withOpacity(0.3)),
+                      border: Border.all(color: accent.withValues(alpha: 0.3)),
                     ),
                     child: Text(
                       widget.level.difficulty,
@@ -492,9 +503,9 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
                 decoration: BoxDecoration(
                   color: _bg,
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: accent.withOpacity(0.4), width: 1.5),
+                  border: Border.all(color: accent.withValues(alpha: 0.4), width: 1.5),
                   boxShadow: [
-                    BoxShadow(color: accent.withOpacity(0.1), blurRadius: 30),
+                    BoxShadow(color: accent.withValues(alpha: 0.1), blurRadius: 30),
                   ],
                 ),
                 child: Column(
@@ -536,7 +547,7 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
                               decoration: BoxDecoration(
                                 color: _card,
                                 borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: accent.withOpacity(0.1)),
+                                border: Border.all(color: accent.withValues(alpha: 0.1)),
                               ),
                               padding: const EdgeInsets.fromLTRB(6, 10, 6, 6),
                               child: Column(
@@ -576,7 +587,7 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
                         height: 50,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: accent.withOpacity(0.12),
+                            backgroundColor: accent.withValues(alpha: 0.12),
                             foregroundColor: accent,
                             side: BorderSide(color: accent, width: 1.5),
                             shape: RoundedRectangleBorder(
@@ -633,7 +644,7 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
                       height: 36,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(0.05),
+                        color: Colors.white.withValues(alpha: 0.05),
                         border: Border.all(color: Colors.white12),
                       ),
                       child: const Icon(
@@ -676,7 +687,7 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
                       height: 34,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(0.05),
+                        color: Colors.white.withValues(alpha: 0.05),
                         border: Border.all(color: Colors.white12),
                       ),
                       child: Icon(
@@ -699,12 +710,12 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
                         horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: timeLow
-                          ? _wrong.withOpacity(0.12)
-                          : Colors.white.withOpacity(0.05),
+                          ? _wrong.withValues(alpha: 0.12)
+                          : Colors.white.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: timeLow
-                            ? _wrong.withOpacity(0.5)
+                            ? _wrong.withValues(alpha: 0.5)
                             : Colors.white12,
                       ),
                     ),
@@ -755,9 +766,9 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: _orange.withOpacity(0.15),
+                        color: _orange.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: _orange.withOpacity(0.4)),
+                        border: Border.all(color: _orange.withValues(alpha: 0.4)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -794,7 +805,7 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
                     decoration: BoxDecoration(
                       color: _card,
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: accent.withOpacity(0.12)),
+                      border: Border.all(color: accent.withValues(alpha: 0.12)),
                     ),
                     child: _currentChord != null
                         ? FittedBox(
