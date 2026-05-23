@@ -1,342 +1,308 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../core/chord/models/finger_position.dart';
 import '../../../core/chord/models/barre_info.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // InteractiveFretboardWidget
 //
-// RENDER-ONLY. Widget ini hanya:
-//   • render strings, frets, dots, explicit barre
-//   • panggil onTap(string, fret) saat user tap sel
+// Painter-nya menggunakan sistem koordinat yang IDENTIK dengan
+// ChordFretboardWidget (pustaka_chord):
+//   leftPad=24, rightPad=10, topPad=8, bottomPad=4
+//   stringSpacing = usableW / 5
+//   fretSpacing   = usableH / 5
+//   dot di (leftPad + string*strSp,  nutY + (row+0.5)*fretSp)
 //
-// Widget TIDAK:
-//   • detect barre otomatis
-//   • normalize chord
-//   • validate chord
-//   • assign finger
-//   • infer mini barre
+// Hit-test onTapDown juga memakai padding yang sama sehingga tap
+// selalu tepat sesuai visual.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Warna jari — identik dengan ChordFretboardWidget
+const _kFingerColors = <int, Color>{
+  1: Color(0xFFFF4C4C),
+  2: Color(0xFF4C9EFF),
+  3: Color(0xFF00E676),
+  4: Color(0xFFFFAA00),
+};
+Color _fingerColor(int f) => _kFingerColors[f] ?? Colors.blueAccent;
 
 class InteractiveFretboardWidget extends StatelessWidget {
   final List<FingerPosition> placedDots;
-  final List<bool> mutedStrings;
+  final List<bool>           mutedStrings;
   final void Function(int string, int fret) onTap;
-  final bool reviewMode;
-  final Map<int, Color> reviewColors;
-  final int baseFret;
+  final bool                 reviewMode;
+  final Map<int, Color>      reviewColors;
+  final int                  baseFret;
+  final List<BarreInfo>      barres;
 
-  // Explicit barres — hanya render jika parent eksplisit kirim.
-  // Default kosong → tidak ada barre yang dirender.
-  final List<BarreInfo> barres;
-
-  static const int _strings = 6;
-  static const int _frets   = 5;
+  static const int    _strings    = 6;
+  static const int    _frets      = 5;
+  // Padding IDENTIK dengan ChordFretboardWidget._FretboardPainter
+  static const double _leftPad    = 24.0;
+  static const double _rightPad   = 10.0;
+  static const double _topPad     =  8.0;
+  static const double _bottomPad  =  4.0;
 
   const InteractiveFretboardWidget({
     super.key,
     required this.placedDots,
     required this.mutedStrings,
     required this.onTap,
-    this.reviewMode  = false,
+    this.reviewMode   = false,
     this.reviewColors = const {},
-    this.baseFret    = 1,
-    this.barres      = const [],
+    this.baseFret     = 1,
+    this.barres       = const [],
   });
-
-  // Padding horizontal agar string 0 dan 5 tidak nempel tepi canvas.
-  // Nilai ini harus KONSISTEN antara hit-test dan painter.
-  static const double _hPad = 16.0;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final w = constraints.maxWidth;
-        final h = constraints.maxHeight;
+    return LayoutBuilder(builder: (context, constraints) {
+      final w = constraints.maxWidth;
+      final h = constraints.maxHeight;
 
-        // Area fretboard efektif (di dalam padding)
-        final innerW = w - _hPad * 2;
-        final stringSpacing = innerW / (_strings - 1);
-        final fretSpacing   = h / _frets;
+      // Koordinat identik dengan painter
+      final usableW   = w - _leftPad - _rightPad;
+      final usableH   = h - _topPad  - _bottomPad;
+      final strSp     = usableW / (_strings - 1);
+      final fretSp    = usableH / _frets;
 
-        return GestureDetector(
-          onTapDown: reviewMode
-              ? null
-              : (details) {
-                  // Offset dx dengan padding sebelum hitung string index
-                  final dx = details.localPosition.dx - _hPad;
-                  final dy = details.localPosition.dy;
+      return GestureDetector(
+        onTapDown: reviewMode
+            ? null
+            : (d) {
+                final dx = d.localPosition.dx - _leftPad;
+                final dy = d.localPosition.dy - _topPad;
 
-                  final s = (dx / stringSpacing).round().clamp(0, _strings - 1);
-                  final f = (dy / fretSpacing).floor().clamp(0, _frets - 1);
+                // string: cari yang paling dekat (round)
+                final s = (dx / strSp).round().clamp(0, _strings - 1);
+                // fret row: floor, clamp agar tidak out-of-bound
+                final row = (dy / fretSp).floor().clamp(0, _frets - 1);
 
-                  onTap(s, baseFret + f);
-                },
-          child: RepaintBoundary(
-            child: CustomPaint(
-              size: Size(w, h),
-              painter: _FretboardPainter(
-                placedDots:   placedDots,
-                mutedStrings: mutedStrings,
-                reviewColors: reviewColors,
-                barres:       barres,
-                baseFret:     baseFret,
-                strings:      _strings,
-                frets:        _frets,
-                hPad:         _hPad,
-              ),
+                HapticFeedback.selectionClick();
+                onTap(s, baseFret + row);
+              },
+        child: RepaintBoundary(
+          child: CustomPaint(
+            size: Size(w, h),
+            painter: _InteractivePainter(
+              placedDots:   placedDots,
+              mutedStrings: mutedStrings,
+              reviewColors: reviewColors,
+              barres:       barres,
+              baseFret:     baseFret,
             ),
           ),
-        );
-      },
-    );
+        ),
+      );
+    });
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Painter
+// Painter — koordinat identik dengan ChordFretboardWidget._FretboardPainter
 // ─────────────────────────────────────────────────────────────────────────────
-class _FretboardPainter extends CustomPainter {
+class _InteractivePainter extends CustomPainter {
   final List<FingerPosition> placedDots;
-  final List<bool> mutedStrings;
-  final Map<int, Color> reviewColors;
-  final List<BarreInfo> barres;
-  final int baseFret;
-  final int strings;
-  final int frets;
+  final List<bool>           mutedStrings;
+  final Map<int, Color>      reviewColors;
+  final List<BarreInfo>      barres;
+  final int                  baseFret;
 
-  final double hPad;
+  static const int    _strings   = 6;
+  static const int    _frets     = 5;
+  static const double _leftPad   = 24.0;
+  static const double _rightPad  = 10.0;
+  static const double _topPad    =  8.0;
+  static const double _bottomPad =  4.0;
 
-  const _FretboardPainter({
+  const _InteractivePainter({
     required this.placedDots,
     required this.mutedStrings,
     required this.reviewColors,
     required this.barres,
     required this.baseFret,
-    required this.strings,
-    required this.frets,
-    required this.hPad,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final innerW        = size.width - hPad * 2;
-    final stringSpacing = innerW / (strings - 1);
-    final fretSpacing   = size.height / frets;
+    final usableW = size.width  - _leftPad - _rightPad;
+    final usableH = size.height - _topPad  - _bottomPad;
+    final strSp   = usableW / (_strings - 1);
+    final fretSp  = usableH / _frets;
+    final nutY    = _topPad;
 
-    // Translate canvas ke kanan sejumlah hPad agar string 0 mulai dari hPad
-    canvas.save();
-    canvas.translate(hPad, 0);
-    _drawGrid(canvas, size, stringSpacing, fretSpacing);
-    _drawBarres(canvas, stringSpacing, fretSpacing);
-    _drawDots(canvas, stringSpacing, fretSpacing);
-    canvas.restore();
+    _drawGrid(canvas, size, strSp, fretSp, nutY, usableW);
+    _drawBarres(canvas, strSp, fretSp, nutY);
+    _drawDots(canvas, strSp, fretSp, nutY);
   }
 
-  void _drawGrid(Canvas canvas, Size size, double ss, double fs) {
+  // ── Grid — identik dengan ChordFretboardWidget ──────────────────────────
+  void _drawGrid(Canvas canvas, Size size, double strSp, double fretSp,
+      double nutY, double usableW) {
+    // Nut
+    canvas.drawLine(
+      Offset(_leftPad, nutY),
+      Offset(_leftPad + usableW, nutY),
+      Paint()
+        ..color       = baseFret == 1 ? Colors.white : Colors.white38
+        ..strokeWidth = baseFret == 1 ? 5.0 : 1.5,
+    );
+
     // Fret lines
     final fretPaint = Paint()
-      ..color = Colors.white24
+      ..color       = Colors.white24
       ..strokeWidth = 1.0;
-
-    for (int i = 0; i <= frets; i++) {
-      final dy = i * fs;
-      canvas.drawLine(Offset(0, dy), Offset(size.width, dy), fretPaint);
-    }
-
-    // Nut (fret 0 = atas) — tebal jika di posisi pertama
-    if (baseFret == 1) {
+    for (int i = 1; i <= _frets; i++) {
+      final dy = nutY + i * fretSp;
       canvas.drawLine(
-        Offset(0, 0),
-        Offset(size.width, 0),
-        Paint()
-          ..color = Colors.white
-          ..strokeWidth = 4.0,
+        Offset(_leftPad, dy),
+        Offset(_leftPad + usableW, dy),
+        fretPaint,
       );
     }
 
     // Strings
-    for (int i = 0; i < strings; i++) {
-      final dx = i * ss;
+    for (int i = 0; i < _strings; i++) {
+      final dx = _leftPad + i * strSp;
       canvas.drawLine(
-        Offset(dx, 0),
-        Offset(dx, size.height),
+        Offset(dx, nutY),
+        Offset(dx, nutY + _frets * fretSp),
         Paint()
-          ..color = Colors.white38
-          ..strokeWidth = 1.0 + i * 0.18,
+          ..color       = Colors.white38
+          ..strokeWidth = 1.0 + i * 0.22,
       );
     }
 
-    // BaseFret label (pojok kiri atas jika > 1)
+    // BaseFret label
     if (baseFret > 1) {
-      final tp = TextPainter(
-        text: TextSpan(
-          text: '${baseFret}fr',
-          style: const TextStyle(color: Colors.white54, fontSize: 10),
+      _text(
+        canvas,
+        '${baseFret}fr',
+        Offset(2, nutY + fretSp * 0.5),
+        const TextStyle(
+          color: Colors.white70,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
         ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, const Offset(2, 2));
+        cy: true,
+      );
     }
   }
 
-  void _drawBarres(Canvas canvas, double ss, double fs) {
+  // ── Barre bars ───────────────────────────────────────────────────────────
+  void _drawBarres(Canvas canvas, double strSp, double fretSp, double nutY) {
     for (final b in barres) {
       final row = b.fret - baseFret;
-      if (row < 0 || row >= frets) continue;
+      if (row < 0 || row >= _frets) continue;
 
-      final dy     = (row + 0.5) * fs;
-      final xStart = b.startString * ss;
-      final xEnd   = b.endString   * ss;
+      final dy     = nutY + (row + 0.5) * fretSp;
+      final xStart = _leftPad + b.startString * strSp;
+      final xEnd   = _leftPad + b.endString   * strSp;
 
-      // Saat review mode: warna barre ditentukan dari reviewColors string-nya.
-      // Jika semua string barre hijau → hijau, ada satu merah → merah,
-      // tidak ada reviewColors → warna default (merah jari).
-      Color barreColor;
+      // Warna: review → cek reviewColors, default → merah (jari 1)
+      Color barreColor = _fingerColor(1); // merah = jari 1
       if (reviewColors.isNotEmpty) {
-        bool anyRed   = false;
-        bool anyGreen = false;
+        bool anyRed = false, anyGreen = false;
         for (int s = b.startString; s <= b.endString; s++) {
           final c = reviewColors[s];
-          if (c != null) {
-            if (c == const Color(0xFF00E676)) anyGreen = true;
-            else anyRed = true;
-          }
+          if (c == const Color(0xFF00E676)) anyGreen = true;
+          else if (c != null) anyRed = true;
         }
-        if (anyRed) {
-          barreColor = const Color(0xFFFF4C4C);
-        } else if (anyGreen) {
-          barreColor = const Color(0xFF00E676);
-        } else {
-          barreColor = const Color(0xFFFF4C4C);
-        }
-      } else {
-        barreColor = const Color(0xFFFF4C4C);
+        barreColor = anyRed
+            ? const Color(0xFFFF4C4C)
+            : anyGreen
+                ? const Color(0xFF00E676)
+                : _fingerColor(1);
       }
 
       // Glow
       canvas.drawRRect(
         RRect.fromRectAndRadius(
-          Rect.fromPoints(
-            Offset(xStart - 8, dy - 13),
-            Offset(xEnd   + 8, dy + 13),
-          ),
+          Rect.fromPoints(Offset(xStart - 8, dy - 13), Offset(xEnd + 8, dy + 13)),
           const Radius.circular(12),
         ),
         Paint()
-          ..color = barreColor.withValues(alpha: 0.2)
+          ..color      = barreColor.withValues(alpha: 0.22)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
       );
-
-      // Bar body
+      // Bar
       canvas.drawRRect(
         RRect.fromRectAndRadius(
-          Rect.fromPoints(
-            Offset(xStart - 7, dy - 11),
-            Offset(xEnd   + 7, dy + 11),
-          ),
+          Rect.fromPoints(Offset(xStart - 7, dy - 11), Offset(xEnd + 7, dy + 11)),
           const Radius.circular(11),
         ),
         Paint()
-          ..color = barreColor
+          ..color = barreColor.withValues(alpha: 0.9)
           ..style = PaintingStyle.fill,
       );
-
-      // Nomor jari
-      final tp = TextPainter(
-        text: TextSpan(
-          text: '${b.finger}',
-          style: const TextStyle(
-            color: Colors.black,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-
-      tp.paint(
-        canvas,
-        Offset(
-          (xStart + xEnd) / 2 - tp.width  / 2,
-          dy                  - tp.height / 2,
-        ),
-      );
+      // Label jari
+      _text(canvas, '${b.finger}',
+          Offset((xStart + xEnd) / 2, dy),
+          const TextStyle(
+              color: Colors.black, fontSize: 12, fontWeight: FontWeight.bold),
+          cx: true, cy: true);
     }
   }
 
-  void _drawDots(Canvas canvas, double ss, double fs) {
-    // Kumpulkan posisi yang sudah di-cover barre → skip dot di posisi itu
+  // ── Dots individual ──────────────────────────────────────────────────────
+  void _drawDots(Canvas canvas, double strSp, double fretSp, double nutY) {
+    // String yang di-cover barre → skip dot di fret barre
     final barreCovered = <String>{};
     for (final b in barres) {
-      final row = b.fret - baseFret;
-      if (row < 0 || row >= frets) continue;
       for (int s = b.startString; s <= b.endString; s++) {
         barreCovered.add('${s}_${b.fret}');
       }
     }
 
     for (final dot in placedDots) {
-      if (mutedStrings.length > dot.string && mutedStrings[dot.string]) continue;
-
-      final key = '${dot.string}_${dot.fret}';
-      if (barreCovered.contains(key)) continue;
+      if (dot.string < mutedStrings.length && mutedStrings[dot.string]) continue;
+      if (barreCovered.contains('${dot.string}_${dot.fret}')) continue;
 
       final row = dot.fret - baseFret;
-      if (row < 0 || row >= frets) continue;
+      if (row < 0 || row >= _frets) continue;
 
-      final dx = dot.string * ss;
-      final dy = (row + 0.5) * fs;
+      final dx = _leftPad + dot.string * strSp;
+      final dy = nutY + (row + 0.5) * fretSp;
 
-      // Warna dot: reviewColors jika ada, default blueAccent
-      final Color dotColor = reviewColors.containsKey(dot.string)
+      // Warna: reviewColors jika ada, atau warna jari dari _kFingerColors
+      final Color color = reviewColors.containsKey(dot.string)
           ? reviewColors[dot.string]!
-          : Colors.blueAccent;
+          : _fingerColor(dot.finger > 0 ? dot.finger : 2);
 
       // Glow
-      canvas.drawCircle(
-        Offset(dx, dy),
-        18,
-        Paint()
-          ..color = dotColor.withValues(alpha: 0.2)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
-      );
-
-      // Dot body
-      canvas.drawCircle(Offset(dx, dy), 13, Paint()..color = dotColor);
-
-      // Nomor jari (0 = tidak tampil)
+      canvas.drawCircle(Offset(dx, dy), 16,
+          Paint()
+            ..color      = color.withValues(alpha: 0.25)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+      // Dot
+      canvas.drawCircle(Offset(dx, dy), 13, Paint()..color = color);
+      // Nomor jari
       if (dot.finger > 0) {
-        final tp = TextPainter(
-          text: TextSpan(
-            text: '${dot.finger}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          textDirection: TextDirection.ltr,
-        )..layout();
-
-        tp.paint(
-          canvas,
-          Offset(
-            dx - tp.width  / 2,
-            dy - tp.height / 2,
-          ),
-        );
+        _text(canvas, '${dot.finger}', Offset(dx, dy),
+            const TextStyle(
+                color: Colors.black, fontSize: 12, fontWeight: FontWeight.bold),
+            cx: true, cy: true);
       }
     }
   }
 
-  @override
-  bool shouldRepaint(covariant _FretboardPainter old) {
-    return old.placedDots   != placedDots   ||
-           old.mutedStrings != mutedStrings  ||
-           old.reviewColors != reviewColors  ||
-           old.barres       != barres        ||
-           old.baseFret     != baseFret      ||
-           old.hPad         != hPad;
+  // ── Helper teks ──────────────────────────────────────────────────────────
+  void _text(Canvas canvas, String t, Offset pos, TextStyle style,
+      {bool cx = false, bool cy = false}) {
+    final tp = TextPainter(
+        text: TextSpan(text: t, style: style),
+        textDirection: TextDirection.ltr)
+      ..layout();
+    final dx = cx ? pos.dx - tp.width  / 2 : pos.dx;
+    final dy = cy ? pos.dy - tp.height / 2 : pos.dy;
+    tp.paint(canvas, Offset(dx, dy));
   }
+
+  @override
+  bool shouldRepaint(covariant _InteractivePainter old) =>
+      old.placedDots   != placedDots   ||
+      old.mutedStrings != mutedStrings  ||
+      old.reviewColors != reviewColors  ||
+      old.barres       != barres        ||
+      old.baseFret     != baseFret;
 }
