@@ -43,6 +43,10 @@ class InteractiveFretboardWidget extends StatelessWidget {
     this.barres      = const [],
   });
 
+  // Padding horizontal agar string 0 dan 5 tidak nempel tepi canvas.
+  // Nilai ini harus KONSISTEN antara hit-test dan painter.
+  static const double _hPad = 16.0;
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -50,14 +54,17 @@ class InteractiveFretboardWidget extends StatelessWidget {
         final w = constraints.maxWidth;
         final h = constraints.maxHeight;
 
-        final stringSpacing = w / (_strings - 1);
+        // Area fretboard efektif (di dalam padding)
+        final innerW = w - _hPad * 2;
+        final stringSpacing = innerW / (_strings - 1);
         final fretSpacing   = h / _frets;
 
         return GestureDetector(
           onTapDown: reviewMode
               ? null
               : (details) {
-                  final dx = details.localPosition.dx;
+                  // Offset dx dengan padding sebelum hitung string index
+                  final dx = details.localPosition.dx - _hPad;
                   final dy = details.localPosition.dy;
 
                   final s = (dx / stringSpacing).round().clamp(0, _strings - 1);
@@ -76,6 +83,7 @@ class InteractiveFretboardWidget extends StatelessWidget {
                 baseFret:     baseFret,
                 strings:      _strings,
                 frets:        _frets,
+                hPad:         _hPad,
               ),
             ),
           ),
@@ -97,6 +105,8 @@ class _FretboardPainter extends CustomPainter {
   final int strings;
   final int frets;
 
+  final double hPad;
+
   const _FretboardPainter({
     required this.placedDots,
     required this.mutedStrings,
@@ -105,16 +115,22 @@ class _FretboardPainter extends CustomPainter {
     required this.baseFret,
     required this.strings,
     required this.frets,
+    required this.hPad,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final stringSpacing = size.width  / (strings - 1);
+    final innerW        = size.width - hPad * 2;
+    final stringSpacing = innerW / (strings - 1);
     final fretSpacing   = size.height / frets;
 
+    // Translate canvas ke kanan sejumlah hPad agar string 0 mulai dari hPad
+    canvas.save();
+    canvas.translate(hPad, 0);
     _drawGrid(canvas, size, stringSpacing, fretSpacing);
     _drawBarres(canvas, stringSpacing, fretSpacing);
     _drawDots(canvas, stringSpacing, fretSpacing);
+    canvas.restore();
   }
 
   void _drawGrid(Canvas canvas, Size size, double ss, double fs) {
@@ -320,6 +336,7 @@ class _FretboardPainter extends CustomPainter {
            old.mutedStrings != mutedStrings  ||
            old.reviewColors != reviewColors  ||
            old.barres       != barres        ||
-           old.baseFret     != baseFret;
+           old.baseFret     != baseFret      ||
+           old.hPad         != hPad;
   }
 }

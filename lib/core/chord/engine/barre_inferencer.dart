@@ -4,25 +4,31 @@ import '../models/finger_position.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // BarreInferencer
 //
-// Menganalisis dots yang ditempatkan user dan menginfer barre secara otomatis.
+// Mendeteksi barre dari pola dots user, mengikuti prinsip chord_library.dart.
 //
-// Aturan inferensi barre:
-//   1. Kumpulkan dots yang berada di fret yang sama.
-//   2. Jika ada ≥ 2 dot di fret yang sama DAN string-nya BERURUTAN (consecutive),
-//      anggap sebagai barre → gambar bar, assign finger = 1 (telunjuk).
-//   3. Dots yang ada di fret lain (non-barre) mendapat finger 2,3,4 secara urut.
-//   4. Jika ada dua grup barre berbeda fret, grup fret terkecil = barre utama (finger 1),
-//      grup berikutnya = mini-barre (finger 2), dst — hingga max finger 4.
+// ══ RULE BARRE ══
 //
-// Output:
-//   • List<BarreInfo>        → untuk dirender sebagai bar merah
-//   • List<FingerPosition>   → dots yang TIDAK tercakup barre (dengan finger terisi)
+// Barre valid jika fret TERENDAH (fretMin) memenuhi SEMUA syarat:
+//   1. Punya >= 2 dots
+//   2. span (sMax - sMin + 1) >= 4   ← minimum jangkauan barre nyata
+//   3. Salah satu dari:
+//      a. Ada GAP di anchor strings (span > count)         → contoh: F, Cm, Bm
+//      b. Ada dot INTERIOR di fret lain antara sMin..sMax  → contoh: Cm, B
+//
+// Kenapa span >= 4 penting:
+//   Chord D (frets: -1,-1,0,2,3,2) → dots [(3,2),(4,3),(5,2)]
+//   Anchor di fret 2: strings [3,5] → span=3, ada interior di string 4 fret 3
+//   Tanpa filter span, D dianggap barre — SALAH.
+//   Span=3 terlalu sempit untuk barre nyata (min barre = 4 string).
+//
+// Semua barre nyata di library punya span >= 4:
+//   Am-shape (Cm,Bm,B): anchor [1,5] → span=5 ✓
+//   E-shape  (F,Fm,G):  anchor [0,5] → span=6 ✓
+//   Half-barre (Bb):    anchor [0,5] → span=6 ✓
 // ─────────────────────────────────────────────────────────────────────────────
 
 class BarreInferenceResult {
   final List<BarreInfo> barres;
-
-  /// Dots yang TIDAK di-cover barre, sudah dilengkapi finger number (1–4).
   final List<FingerPosition> remainingDots;
 
   const BarreInferenceResult({
@@ -32,8 +38,11 @@ class BarreInferenceResult {
 }
 
 class BarreInferencer {
-  /// [dots] — posisi yang ditempatkan user (finger boleh 0).
-  /// [baseFret] — fret pertama yang ditampilkan di layar.
+  // Minimum span anchor strings untuk dianggap barre.
+  // 4 = minimal barre mencakup 4 string (sempit), 6 = full 6 string.
+  // Semua barre di chord_library punya span 5 atau 6 → threshold 4 aman.
+  static const int _minBarreSpan = 4;
+
   static BarreInferenceResult infer(
     List<FingerPosition> dots, {
     int baseFret = 1,
@@ -48,72 +57,57 @@ class BarreInferencer {
       byFret.putIfAbsent(d.fret, () => []).add(d.string);
     }
 
-    // ── 2. Cari fret-fret yang membentuk barre (≥2 string berurutan) ────────
-    final List<_BarreCandidate> candidates = [];
+    // ── 2. Fret terendah = kandidat anchor barre ────────────────────────────
+    final int fretMin =
+        byFret.keys.reduce((a, b) => a < b ? a : b);
+    final List<int> anchorStrings =
+        List<int>.from(byFret[fretMin]!)..sort();
 
-    for (final entry in byFret.entries) {
-      final fret = entry.key;
-      final strings = List<int>.from(entry.value)..sort();
+    // ── 3. Validasi barre ───────────────────────────────────────────────────
+    BarreInfo? barre;
 
-      // Cari run terpanjang yang berurutan
-      int runStart = 0;
-      for (int i = 1; i <= strings.length; i++) {
-        final isEnd = i == strings.length;
-        final isBreak = !isEnd && strings[i] != strings[i - 1] + 1;
+    if (anchorStrings.length >= 2) {
+      final int sMin  = anchorStrings.first;
+      final int sMax  = anchorStrings.last;
+      final int span  = sMax - sMin + 1;
+      final int count = anchorStrings.length;
 
-        if (isEnd || isBreak) {
-          final runLen = i - runStart;
-          if (runLen >= 2) {
-            candidates.add(_BarreCandidate(
-              fret: fret,
-              startString: strings[runStart],
-              endString: strings[i - 1],
-              count: runLen,
-            ));
-          }
-          runStart = i;
+      // Syarat span minimum — filter chord seperti D (span=3)
+      if (span >= _minBarreSpan) {
+        // Kondisi a: ada gap di anchor strings
+        final bool hasGap = span > count;
+
+        // Kondisi b: ada dot interior (fret lain, string antara sMin..sMax)
+        final bool hasInterior = dots.any(
+          (d) => d.fret != fretMin && d.string > sMin && d.string < sMax,
+        );
+
+        if (hasGap || hasInterior) {
+          barre = BarreInfo(
+            finger: 1,
+            fret: fretMin,
+            startString: sMin,
+            endString: sMax,
+          );
         }
       }
     }
 
-    // ── 3. Urutkan kandidat: fret terkecil dulu (barre utama = telunjuk) ────
-    candidates.sort((a, b) => a.fret.compareTo(b.fret));
-
-    // Batasi: max 2 barre aktif (jari 1 dan 2); di atas itu anggap individual dots
-    final activeCandidates = candidates.take(2).toList();
-
-    // ── 4. Bangun BarreInfo dengan finger assignment ─────────────────────────
-    final barres = <BarreInfo>[];
-    int nextFingerForBarre = 1;
-
-    for (final c in activeCandidates) {
-      barres.add(BarreInfo(
-        finger: nextFingerForBarre,
-        fret: c.fret,
-        startString: c.startString,
-        endString: c.endString,
-      ));
-      nextFingerForBarre++;
-    }
-
-    // ── 5. Kumpulkan string yang di-cover barre ──────────────────────────────
-    final Set<String> barreCovered = {};
-    for (final b in barres) {
-      for (int s = b.startString; s <= b.endString; s++) {
-        barreCovered.add('${s}_${b.fret}');
-      }
-    }
-
-    // ── 6. Dots yang tidak tercakup barre → assign finger 2/3/4 secara urut ─
-    final remaining = <FingerPosition>[];
-    int nextFingerForDot = nextFingerForBarre; // lanjut dari setelah barre finger
+    // ── 4. Bangun remainingDots ──────────────────────────────────────────────
+    final List<FingerPosition> remaining = [];
+    int nextFinger = barre != null ? 2 : 1;
 
     for (final d in dots) {
-      final key = '${d.string}_${d.fret}';
-      if (barreCovered.contains(key)) continue;
+      // Skip jika di-cover barre
+      if (barre != null &&
+          d.fret == barre.fret &&
+          d.string >= barre.startString &&
+          d.string <= barre.endString) {
+        continue;
+      }
 
-      final finger = nextFingerForDot <= 4 ? nextFingerForDot : 4;
-      nextFingerForDot++;
+      final finger = nextFinger <= 4 ? nextFinger : 4;
+      nextFinger++;
 
       remaining.add(FingerPosition(
         string: d.string,
@@ -122,20 +116,9 @@ class BarreInferencer {
       ));
     }
 
-    return BarreInferenceResult(barres: barres, remainingDots: remaining);
+    return BarreInferenceResult(
+      barres: barre != null ? [barre] : [],
+      remainingDots: remaining,
+    );
   }
-}
-
-class _BarreCandidate {
-  final int fret;
-  final int startString;
-  final int endString;
-  final int count;
-
-  const _BarreCandidate({
-    required this.fret,
-    required this.startString,
-    required this.endString,
-    required this.count,
-  });
 }

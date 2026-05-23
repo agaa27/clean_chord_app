@@ -88,25 +88,75 @@ bool _validate({
   final target = _chordNotes(chord);
   if (target.isEmpty) return false;
 
-  // Kumpulkan semua nada yang terdengar:
-  // 1. Nada dari dot yang dipasang (fret > 0, string tidak di-mute)
-  // 2. Nada open string yang tidak di-mute DAN tidak punya dot
-  //    (open string yang ada dotnya tidak dihitung sebagai open)
-  final playedNotes = <String>{};
-
-  final stringWithDot = dots.map((d) => d.string).toSet();
-
-  // Dot notes
+  // ── Bangun effectiveDots: _dots + ekspansi barre ────────────────────────
+  //
+  // ROOT CAUSE FIX:
+  // User yang membentuk barre chord biasanya hanya tap 2 "anchor" string
+  // (ujung kiri dan kanan barre) karena barre bar visual sudah menutupi semua.
+  // Akibatnya _dots tidak berisi dot untuk string di TENGAH barre.
+  // _validate yang hanya melihat _dots akan miss nada dari string tengah itu.
+  //
+  // Fix: deteksi barre aktif (sama seperti BarreInferencer), lalu expand
+  // semua string dalam rentang barre ke effectiveDots sebelum cek nada.
+  //
+  // Barre detection: fret terendah dengan 2+ dot, span >= 4,
+  // ada gap di anchor strings ATAU ada dot interior di fret lain.
+  final Map<int, List<int>> _byFret = {};
   for (final d in dots) {
+    _byFret.putIfAbsent(d.fret, () => []).add(d.string);
+  }
+
+  int? barreFret;
+  int  barreStart = 0;
+  int  barreEnd   = 0;
+
+  if (_byFret.isNotEmpty) {
+    final fretMin     = _byFret.keys.reduce((a, b) => a < b ? a : b);
+    final anchors     = List<int>.from(_byFret[fretMin]!)..sort();
+    if (anchors.length >= 2) {
+      final sMin  = anchors.first;
+      final sMax  = anchors.last;
+      final span  = sMax - sMin + 1;
+      final hasGap      = span > anchors.length;
+      final hasInterior = dots.any(
+        (d) => d.fret != fretMin && d.string > sMin && d.string < sMax,
+      );
+      if (span >= 4 && (hasGap || hasInterior)) {
+        barreFret  = fretMin;
+        barreStart = sMin;
+        barreEnd   = sMax;
+      }
+    }
+  }
+
+  // effectiveDots = _dots + string barre yang belum di-dot user
+  final List<FingerPosition> effectiveDots = List.from(dots);
+  if (barreFret != null) {
+    final tappedStrings = dots.map((d) => d.string).toSet();
+    for (int s = barreStart; s <= barreEnd; s++) {
+      if (!tappedStrings.contains(s)) {
+        effectiveDots.add(FingerPosition(string: s, fret: barreFret!, finger: 1));
+      }
+    }
+  }
+
+  // ── Kumpulkan nada dari effectiveDots + open string relevan ──────────────
+  final playedNotes   = <String>{};
+  final stringWithDot = effectiveDots.map((d) => d.string).toSet();
+
+  for (final d in effectiveDots) {
     if (!muted[d.string]) {
       playedNotes.add(_note(d.string, d.fret));
     }
   }
 
-  // Open string notes (hanya string tanpa dot dan tidak di-mute)
+  // Open string: hanya jika notanya ada di target (cegah false positive)
   for (int s = 0; s < 6; s++) {
     if (!muted[s] && !stringWithDot.contains(s)) {
-      playedNotes.add(_note(s, 0));
+      final openNote = _note(s, 0);
+      if (target.contains(openNote)) {
+        playedNotes.add(openNote);
+      }
     }
   }
 
@@ -310,6 +360,19 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
   // Dengan ini barre chord bisa dibentuk: user tap string 1..5 di fret 2 → 5 dot terpasang ✓
   void _onTap(int string, int fret) {
     if (_isReviewing || _isGameOver) return;
+
+    // FIX: tolak tap jika posisi ini sedang di-cover barre aktif.
+    // Dot di bawah barre tidak dirender sehingga user tidak bisa melihatnya,
+    // tapi masih ada di _dots. Tanpa guard ini, user tap → dot dihapus
+    // (exactIdx ditemukan) → validasi gagal meski shape sudah benar.
+    final activeBarres = BarreInferencer.infer(_dots, baseFret: _baseFret).barres;
+    final coveredByBarre = activeBarres.any(
+      (b) => b.fret == fret &&
+              string >= b.startString &&
+              string <= b.endString,
+    );
+    if (coveredByBarre) return;
+
     setState(() {
       final exactIdx = _dots.indexWhere(
         (d) => d.string == string && d.fret == fret,
