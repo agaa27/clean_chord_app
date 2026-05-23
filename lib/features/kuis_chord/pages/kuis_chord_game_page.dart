@@ -453,12 +453,17 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
                       size: 18,
                     ),
                   ),
-                  Text(
-                    'Level ${widget.level.id}  •  ${widget.level.name}',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                  Expanded(
+                    child: Text(
+                      'Level ${widget.level.id}  •  ${widget.level.name}',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   Container(

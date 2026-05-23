@@ -73,9 +73,7 @@ final List<ChordModel> chordLibrary = [
     root: 'C',
     type: '7',
     shapes: [
-      // x 3 2 3 1 0  — standard open C7 (5th omitted; accepted in all references)
-      ChordShapeModel(frets: [-1, 3, 2, 3, 1, 0], fingers: [0, 3, 2, 4, 1, 0]),
-      // Barre fret 3 (A7-shape)
+      // Barre fret 3 (A7-shape) — C E G Bb ✓ all chord tones
       ChordShapeModel(
         frets: [-1, 3, 5, 3, 5, 3],
         fingers: [0, 1, 3, 1, 4, 1],
@@ -84,6 +82,8 @@ final List<ChordModel> chordLibrary = [
         barreStartString: 1,
         barreEndString: 5,
       ),
+      // x 3 2 3 1 0  — open C7 (5th omitted, display only)
+      ChordShapeModel(frets: [-1, 3, 2, 3, 1, 0], fingers: [0, 3, 2, 4, 1, 0]),
     ],
   ),
 
@@ -169,13 +169,7 @@ final List<ChordModel> chordLibrary = [
     root: 'C#',
     type: '7',
     shapes: [
-      // Barre fret 4 (A7-shape)
-      ChordShapeModel(
-        frets: [-1, 4, 3, 4, 2, -1],
-        fingers: [0, 3, 2, 4, 1, 0],
-        baseFret: 2,
-      ),
-      // Barre fret 9 (E7-shape)
+      // Barre fret 9 (E7-shape) — C# F G# B ✓ all chord tones
       ChordShapeModel(
         frets: [9, 11, 9, 10, 9, 9],
         fingers: [1, 3, 1, 2, 1, 1],
@@ -183,6 +177,12 @@ final List<ChordModel> chordLibrary = [
         barreFret: 9,
         barreStartString: 0,
         barreEndString: 5,
+      ),
+      // A7-shape at fret 4 (str5 muted — display only)
+      ChordShapeModel(
+        frets: [-1, 4, 3, 4, 2, -1],
+        fingers: [0, 3, 2, 4, 1, 0],
+        baseFret: 2,
       ),
     ],
   ),
@@ -773,9 +773,9 @@ final List<ChordModel> chordLibrary = [
         baseFret: 6,
       ),
       ChordShapeModel(
-        frets: [-1, 11, 10, 11, 9, -1],
-        fingers: [0, 3, 2, 4, 1, 0],
-        baseFret: 9,
+        frets: [-1, -1, 6, 5, 4, 4],
+        fingers: [0, 0, 4, 3, 1, 2],
+        baseFret: 4,
       ),
     ],
   ),
@@ -1008,7 +1008,8 @@ final List<ChordModel> chordLibrary = [
     root: 'B',
     type: '7',
     shapes: [
-      ChordShapeModel(frets: [-1, 2, 1, 2, 0, 0], fingers: [0, 2, 1, 3, 0, 0]),
+      // x 2 1 2 0 2  — B D# A B F# (open B7, all chord tones)
+      ChordShapeModel(frets: [-1, 2, 1, 2, 0, 2], fingers: [0, 2, 1, 3, 0, 4]),
       // x 2 4 2 4 2  — Barre fret 2 (A7-shape)
       ChordShapeModel(
         frets: [-1, 2, 4, 2, 4, 2],
@@ -1683,7 +1684,7 @@ final List<ChordModel> chordLibrary = [
     type: 'm7',
     shapes: [
       ChordShapeModel(
-        frets: [3, 5, 1, 1, 1, 1],
+        frets: [3, 5, 3, 3, 3, 3],
         fingers: [1, 3, 1, 1, 1, 1],
         baseFret: 3,
         barreFret: 3,
@@ -1710,7 +1711,7 @@ final List<ChordModel> chordLibrary = [
     type: 'm7',
     shapes: [
       ChordShapeModel(
-        frets: [4, 6, 1, 1, 1, 1],
+        frets: [4, 6, 4, 4, 4, 4],
         fingers: [1, 3, 1, 1, 1, 1],
         baseFret: 4,
         barreFret: 4,
