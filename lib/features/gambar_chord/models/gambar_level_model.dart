@@ -21,13 +21,14 @@ class GambarLevel {
   });
 }
 
-// Durasi berdasarkan difficulty (detik per soal)
+// FIX #8: Durasi dibalik — Pemula lebih banyak waktu (masih belajar),
+// Mahir lebih sedikit (sudah hafal, jadi lebih menantang).
 int gambarDurationForDifficulty(String difficulty) {
   switch (difficulty) {
-    case 'Pemula':   return 60;
-    case 'Menengah': return 90;
-    case 'Mahir':    return 120;
-    default:         return 60;
+    case 'Pemula':   return 120;  // was 60 — pemula butuh waktu lebih banyak
+    case 'Menengah': return 90;   // was 90 — tetap
+    case 'Mahir':    return 60;   // was 120 — mahir harus cepat
+    default:         return 120;
   }
 }
 
@@ -221,24 +222,47 @@ final List<GambarLevel> gambarLevels = [
     difficulty: 'Mahir',
     targetPoints: 5,
   ),
+  // FIX #14: Grand Master kini benar-benar menyertakan SEMUA chord dari semua level.
   const GambarLevel(
     id: 20,
     name: 'Grand Master',
     subtitle: 'Semua jenis chord',
     chordNames: [
+      // Major natural
       'C','D','E','F','G','A','B',
+      // Major chromatic
       'C#','D#','F#','G#','A#',
+      // Minor natural
       'Cm','Dm','Em','Fm','Gm','Am','Bm',
+      // Minor chromatic
       'C#m','D#m','F#m','G#m','A#m',
-      'C7','G7','D7','A7','E7','B7',
-      'Cmaj7','Gmaj7','Dmaj7','Amaj7',
-      'Cm7','Gm7','Dm7','Am7',
-      'Csus4','Gsus4','Dsus4','Asus4',
-      'Cadd9','Gadd9','Dadd9','Aadd9',
-      'C5','G5','D5','A5','E5','F5',
+      // Dominant 7 natural
+      'C7','D7','E7','F7','G7','A7','B7',
+      // Dominant 7 chromatic
+      'C#7','D#7','F#7','G#7','A#7',
+      // Major 7 natural
+      'Cmaj7','Dmaj7','Emaj7','Fmaj7','Gmaj7','Amaj7','Bmaj7',
+      // Major 7 chromatic  ← FIX: sebelumnya hilang dari Grand Master
+      'C#maj7','D#maj7','F#maj7','G#maj7','A#maj7',
+      // Minor 7 natural
+      'Cm7','Dm7','Em7','Fm7','Gm7','Am7','Bm7',
+      // Minor 7 chromatic  ← FIX: sebelumnya hilang dari Grand Master
+      'C#m7','D#m7','F#m7','G#m7','A#m7',
+      // Sus4 natural
+      'Csus4','Dsus4','Esus4','Fsus4','Gsus4','Asus4','Bsus4',
+      // Sus4 chromatic (tambahan — konsisten dengan level 11)
+      'C#sus4','D#sus4','F#sus4','G#sus4','A#sus4',
+      // Add9 natural
+      'Cadd9','Dadd9','Eadd9','Fadd9','Gadd9','Aadd9','Badd9',
+      // Add9 chromatic (tambahan — konsisten dengan level 13)
+      'C#add9','D#add9','F#add9','G#add9','A#add9',
+      // Power chord natural
+      'C5','D5','E5','F5','G5','A5','B5',
+      // Power chord chromatic  ← FIX: sebelumnya hilang dari Grand Master
+      'C#5','D#5','F#5','G#5','A#5',
     ],
     type: 'mixed',
     difficulty: 'Mahir',
-    targetPoints: 8,
+    targetPoints: 10,  // naik dari 8 → lebih menantang sesuai jumlah chord
   ),
 ];

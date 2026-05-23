@@ -54,6 +54,43 @@ Set<String> _chordNotes(ChordModel c) {
   return iv.map((i) => _noteNames[(root + i) % 12]).toSet();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Expand barre strings menjadi effectiveDots.
+// FIX #3: Hapus syarat "hasGap || hasInterior" — barre sekarang terdeteksi
+// semata-mata dari span >= 4, tidak peduli apakah user tap setiap string
+// satu per satu atau meninggalkan gap.
+// ─────────────────────────────────────────────────────────────────────────────
+List<FingerPosition> _expandBarre(List<FingerPosition> dots) {
+  final Map<int, List<int>> byFret = {};
+  for (final d in dots) {
+    byFret.putIfAbsent(d.fret, () => []).add(d.string);
+  }
+
+  if (byFret.isEmpty) return dots;
+
+  final fretMin = byFret.keys.reduce((a, b) => a < b ? a : b);
+  final anchors = List<int>.from(byFret[fretMin]!)..sort();
+
+  if (anchors.length < 2) return dots;
+
+  final sMin = anchors.first;
+  final sMax = anchors.last;
+  final span = sMax - sMin + 1;
+
+  // FIX #3: span >= 4 cukup — tidak perlu lagi syarat hasGap/hasInterior.
+  // Ini menangani kasus user tap semua string rapi di fret yang sama.
+  if (span < 4) return dots;
+
+  final tappedStrings = dots.map((d) => d.string).toSet();
+  final expanded = List<FingerPosition>.from(dots);
+  for (int s = sMin; s <= sMax; s++) {
+    if (!tappedStrings.contains(s)) {
+      expanded.add(FingerPosition(string: s, fret: fretMin, finger: 1));
+    }
+  }
+  return expanded;
+}
+
 bool _validate({
   required ChordModel chord,
   required List<FingerPosition> dots,
@@ -62,57 +99,8 @@ bool _validate({
   final target = _chordNotes(chord);
   if (target.isEmpty) return false;
 
-  // ── Bangun effectiveDots: _dots + ekspansi barre ────────────────────────
-  //
-  // ROOT CAUSE FIX:
-  // User yang membentuk barre chord biasanya hanya tap 2 "anchor" string
-  // (ujung kiri dan kanan barre) karena barre bar visual sudah menutupi semua.
-  // Akibatnya _dots tidak berisi dot untuk string di TENGAH barre.
-  // _validate yang hanya melihat _dots akan miss nada dari string tengah itu.
-  //
-  // Fix: deteksi barre aktif (sama seperti BarreInferencer), lalu expand
-  // semua string dalam rentang barre ke effectiveDots sebelum cek nada.
-  //
-  // Barre detection: fret terendah dengan 2+ dot, span >= 4,
-  // ada gap di anchor strings ATAU ada dot interior di fret lain.
-  final Map<int, List<int>> _byFret = {};
-  for (final d in dots) {
-    _byFret.putIfAbsent(d.fret, () => []).add(d.string);
-  }
-
-  int? barreFret;
-  int  barreStart = 0;
-  int  barreEnd   = 0;
-
-  if (_byFret.isNotEmpty) {
-    final fretMin     = _byFret.keys.reduce((a, b) => a < b ? a : b);
-    final anchors     = List<int>.from(_byFret[fretMin]!)..sort();
-    if (anchors.length >= 2) {
-      final sMin  = anchors.first;
-      final sMax  = anchors.last;
-      final span  = sMax - sMin + 1;
-      final hasGap      = span > anchors.length;
-      final hasInterior = dots.any(
-        (d) => d.fret != fretMin && d.string > sMin && d.string < sMax,
-      );
-      if (span >= 4 && (hasGap || hasInterior)) {
-        barreFret  = fretMin;
-        barreStart = sMin;
-        barreEnd   = sMax;
-      }
-    }
-  }
-
-  // effectiveDots = _dots + string barre yang belum di-dot user
-  final List<FingerPosition> effectiveDots = List.from(dots);
-  if (barreFret != null) {
-    final tappedStrings = dots.map((d) => d.string).toSet();
-    for (int s = barreStart; s <= barreEnd; s++) {
-      if (!tappedStrings.contains(s)) {
-        effectiveDots.add(FingerPosition(string: s, fret: barreFret!, finger: 1));
-      }
-    }
-  }
+  // Expand barre strings
+  final effectiveDots = _expandBarre(dots);
 
   // ── Kumpulkan nada dari effectiveDots + open string relevan ──────────────
   final playedNotes   = <String>{};
@@ -141,20 +129,19 @@ bool _validate({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Warna review per string
-// Hijau  = nada string ini adalah bagian dari chord
-// Merah  = nada asing (bukan bagian chord)
-// Hanya string yang ada dot yang diberi warna
+// FIX #5: _buildReviewColors kini juga expand barre strings sehingga
+// string tengah barre mendapat warna hijau/merah yang tepat.
 // ─────────────────────────────────────────────────────────────────────────────
 Map<int, Color> _buildReviewColors({
   required ChordModel chord,
   required List<FingerPosition> dots,
   required List<bool> muted,
 }) {
-  final target = _chordNotes(chord);
-  final result = <int, Color>{};
+  final target       = _chordNotes(chord);
+  final effectiveDots = _expandBarre(dots);
+  final result       = <int, Color>{};
 
-  for (final d in dots) {
+  for (final d in effectiveDots) {
     if (muted[d.string]) continue;
     final ok  = target.contains(_note(d.string, d.fret));
     result[d.string] = ok ? const Color(0xFF00E676) : const Color(0xFFFF4C4C);
@@ -264,13 +251,11 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     setState(() {
       _showIntro   = false;
       _dialogShown = false;
-      _timeLeft    = _duration; // set sekali di sini — timer global, tidak reset per soal
+      _timeLeft    = _duration;
     });
     _startTimer();
   }
 
-  // _startTimer hanya membuat/mengganti periodic ticker.
-  // Ia TIDAK mereset _timeLeft — itu tugas _startGame dan _reset.
   void _startTimer() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
@@ -316,8 +301,6 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     if (_isReviewing || _isGameOver) return;
     final next = (_baseFret + delta).clamp(1, 17);
     if (next == _baseFret) return;
-    // FIX: filter pakai 'next', bukan _baseFret — setState synchronous jadi
-    // _baseFret sudah = next saat where() dieksekusi → dot salah hilang.
     setState(() {
       _dots = _dots
           .where((d) => d.fret >= next && d.fret < next + 5)
@@ -325,20 +308,10 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
       _baseFret = next;
     });
   }
-  //
-  // Aturan tap:
-  //   • Tap sel yang sudah ada dot → HAPUS dot itu (toggle off)
-  //   • Tap sel kosong di string yang sudah ada dot → GESER dot ke fret baru
-  //   • Tap sel kosong di string yang belum ada dot → TAMBAH dot baru
-  //
-  // Dengan ini barre chord bisa dibentuk: user tap string 1..5 di fret 2 → 5 dot terpasang ✓
+
   void _onTap(int string, int fret) {
     if (_isReviewing || _isGameOver) return;
 
-    // FIX: tolak tap jika posisi ini sedang di-cover barre aktif.
-    // Dot di bawah barre tidak dirender sehingga user tidak bisa melihatnya,
-    // tapi masih ada di _dots. Tanpa guard ini, user tap → dot dihapus
-    // (exactIdx ditemukan) → validasi gagal meski shape sudah benar.
     final activeBarres = BarreInferencer.infer(_dots, baseFret: _baseFret).barres;
     final coveredByBarre = activeBarres.any(
       (b) => b.fret == fret &&
@@ -352,10 +325,8 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
         (d) => d.string == string && d.fret == fret,
       );
       if (exactIdx != -1) {
-        // Tap di posisi yang persis sama → hapus dot
         _dots = List.from(_dots)..removeAt(exactIdx);
       } else {
-        // Hapus dot lama di string yang sama (kalau ada) lalu pasang di fret baru
         _dots = _dots.where((d) => d.string != string).toList();
         _dots = [..._dots, FingerPosition(string: string, fret: fret, finger: 0)];
         _muted = List.from(_muted)..[string] = false;
@@ -377,8 +348,6 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
   // ── Submit ────────────────────────────────────────────────────────────────
   void _submit() {
     if (_isReviewing || _chord == null) return;
-    // FIX: JANGAN cancel timer global di sini — timer countdown harus terus jalan.
-    // Timer hanya di-cancel saat game over / reset / exit.
 
     final ok = _validate(chord: _chord!, dots: _dots, muted: _muted);
 
@@ -390,8 +359,6 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
       _audio.playWrong();
     }
 
-    // FIX: set _reviewCompleted = false SEBELUM setState agar
-    // tidak ada window di mana flag belum di-reset tapi Future sudah terjadwal.
     _reviewCompleted = false;
     setState(() {
       _isReviewing = true;
@@ -414,15 +381,12 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
   // ── Skip review (jawaban salah) ───────────────────────────────────────────
   void _skipReview() {
     if (!_isReviewing || _isCorrect || _reviewCompleted) return;
-    // FIX: set flag LANGSUNG (bukan dalam setState) agar Future.delayed
-    // membaca nilai terbaru secara synchronous sebelum callback terjadwal.
     _reviewCompleted = true;
     _nextQuestion();
   }
 
   // ── Pindah soal ───────────────────────────────────────────────────────────
   void _nextQuestion() {
-    // FIX: guard ganda — pastikan tidak dipanggil dua kali
     if (!mounted || _isGameOver) return;
     _questionIdx++;
     if (_questionIdx >= widget.level.targetPoints) {
@@ -455,7 +419,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
       _showAnswerPanel  = false;
     });
     _pickQuestion();
-    _startTimer(); // boleh restart saat full reset
+    _startTimer();
   }
 
   void _exit() {
@@ -621,7 +585,8 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                   fontWeight: FontWeight.w800, letterSpacing: 2),
             ),
             const SizedBox(height: 6),
-            Text('${widget.level.targetPoints} soal  •  ${_duration}s per soal',
+            // FIX #16: ubah "per soal" → "total" karena timer adalah countdown global
+            Text('${widget.level.targetPoints} soal  •  ${_duration}s total',
                 style: const TextStyle(color: Colors.white38, fontSize: 11)),
             const SizedBox(height: 10),
 
@@ -640,8 +605,9 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                   const SizedBox(width: 8),
                   const Expanded(
                     child: Text(
+                      // FIX #12: instruksi sekarang akurat — tap nama senar memang berfungsi
                       'Tap fret → pasang dot  •  Tap lagi di posisi sama → hapus  •  '
-                      'Tap nama senar (E A D G B e) → mute  •  '
+                      'Tap nama senar (E A D G B e) di atas → mute  •  '
                       '▲▼ di samping fretboard → geser posisi untuk chord barre  •  '
                       'Pasang dot di semua nada chord — urutan bebas',
                       style: TextStyle(color: Colors.white38, fontSize: 10, height: 1.5),
@@ -854,8 +820,6 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
         const SizedBox(height: 8),
 
         // ── Fretboard area ───────────────────────────────────────────────
-        // Container & style dihandle langsung oleh InteractiveFretboardWidget
-        // agar visual konsisten dengan ChordFretboardWidget di seluruh fitur.
         Expanded(child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: FadeTransition(
@@ -868,6 +832,8 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                     placedDots:   _renderDots,
                     mutedStrings: _muted,
                     onTap:        _onTap,
+                    // FIX #12: sambungkan callback mute ke _toggleMute
+                    onToggleMute: _toggleMute,
                     reviewMode:   _isReviewing,
                     reviewColors: revColors,
                     baseFret:     _baseFret,
@@ -935,13 +901,13 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                     elevation: 0,
                   ),
-                  // Saat review benar → disabled | Saat review salah → bisa tap skip
                   onPressed: _isReviewing
                       ? (_isCorrect ? null : _skipReview)
                       : _submit,
                   child: Text(
+                    // FIX #13: ganti "Menilai..." → "Lanjut otomatis..." agar lebih jelas
                     _isReviewing
-                        ? (_isCorrect ? 'Menilai...' : 'Lanjut →')
+                        ? (_isCorrect ? 'Lanjut otomatis...' : 'Lanjut →')
                         : 'SELESAI',
                     style: const TextStyle(fontWeight: FontWeight.bold,
                         letterSpacing: 2, fontSize: 14),

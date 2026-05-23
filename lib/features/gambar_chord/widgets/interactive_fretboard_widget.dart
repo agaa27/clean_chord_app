@@ -30,6 +30,8 @@ class InteractiveFretboardWidget extends StatelessWidget {
   final List<FingerPosition> placedDots;
   final List<bool>           mutedStrings;
   final void Function(int string, int fret) onTap;
+  // FIX #12: tambah callback untuk toggle mute via tap nama senar
+  final void Function(int string)? onToggleMute;
   final bool                 reviewMode;
   final Map<int, Color>      reviewColors;
   final int                  baseFret;
@@ -48,6 +50,7 @@ class InteractiveFretboardWidget extends StatelessWidget {
     required this.placedDots,
     required this.mutedStrings,
     required this.onTap,
+    this.onToggleMute,
     this.reviewMode   = false,
     this.reviewColors = const {},
     this.baseFret     = 1,
@@ -76,7 +79,7 @@ class InteractiveFretboardWidget extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Baris X / O — identik dengan ChordFretboardWidget ─────────
+          // FIX #12: Baris X / O sekarang tappable untuk toggle mute
           _buildTopRow(),
           const SizedBox(height: 4),
           // ── Fretboard painter ──────────────────────────────────────────
@@ -122,7 +125,7 @@ class InteractiveFretboardWidget extends StatelessWidget {
     );
   }
 
-  // ── Baris X / O ────────────────────────────────────────────────────────
+  // FIX #12: Baris X / O sekarang GestureDetector per string untuk toggle mute
   Widget _buildTopRow() {
     const labels = ['E', 'A', 'D', 'G', 'B', 'e'];
     return Row(
@@ -139,14 +142,27 @@ class InteractiveFretboardWidget extends StatelessWidget {
           symbol = hasDot ? labels[i] : '○';
           color  = hasDot ? Colors.white54 : Colors.white70;
         }
-        return SizedBox(
-          width: 28,
-          child: Center(
-            child: Text(symbol,
+        return GestureDetector(
+          // FIX #12: tap nama senar → toggle mute (sesuai instruksi di intro)
+          onTap: reviewMode
+              ? null
+              : () {
+                  HapticFeedback.selectionClick();
+                  onToggleMute?.call(i);
+                },
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: Center(
+              child: Text(
+                symbol,
                 style: TextStyle(
-                    color: color,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold)),
+                  color: color,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
           ),
         );
       }),
