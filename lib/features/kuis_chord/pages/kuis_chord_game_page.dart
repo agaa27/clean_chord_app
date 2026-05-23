@@ -419,7 +419,7 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
 
   // ─────────────────────── INTRO SCREEN ────────────────────────────────────
   Widget _buildIntroScreen() {
-    final previewNames = widget.level.chordNames.take(6).toList();
+    final previewNames = widget.level.chordNames.toList();
     final previewChords = previewNames
         .map((name) {
           try {

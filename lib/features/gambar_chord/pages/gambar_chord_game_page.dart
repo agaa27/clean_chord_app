@@ -572,7 +572,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
   // ─────────────────────────── INTRO ───────────────────────────────────────
   Widget _buildIntro() {
     final accent   = _accent;
-    final previews = widget.level.chordNames.take(6)
+    final previews = widget.level.chordNames
         .map((n) {
           try { return chordLibrary.firstWhere((c) => _fmtChord(c) == n); }
           catch (_) { return null; }
