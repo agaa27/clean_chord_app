@@ -28,6 +28,41 @@ class GambarChordPage extends StatelessWidget {
     }
   }
 
+  // ── AppBar ──────────────────────────────────────────
+  PreferredSizeWidget _buildAppBar(BuildContext context) {
+    return AppBar(
+      backgroundColor: Colors.black,
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(
+          Icons.arrow_back_ios_new,
+          color: Colors.white70,
+          size: 18,
+        ),
+        onPressed: () => Navigator.pop(context),
+      ),
+      title: const Row(
+        children: [
+          Icon(
+            Icons.fingerprint_rounded,
+            color: Color(0xFF00FF9F),
+            size: 20,
+          ),
+          SizedBox(width: 8),
+          Text(
+            'Gambar Chord',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final grouped = {
@@ -38,24 +73,8 @@ class GambarChordPage extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new,
-              color: Colors.white54, size: 18),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Gambar Chord',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-            fontSize: 17,
-          ),
-        ),
-      ),
+      appBar: _buildAppBar(context),
+
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [
