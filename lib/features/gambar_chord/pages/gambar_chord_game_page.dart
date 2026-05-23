@@ -54,32 +54,6 @@ Set<String> _chordNotes(ChordModel c) {
   return iv.map((i) => _noteNames[(root + i) % 12]).toSet();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// VALIDASI — TOLERAN & BENAR UNTUK SEMUA CHORD TERMASUK BARRE
-//
-// Masalah dengan exact-match sebelumnya:
-//   User yang tidak mute string open yang "tidak sengaja" berbunyi
-//   akan selalu gagal, padahal penempatan dotnya sudah benar.
-//
-// Logika baru (dua tahap):
-//
-// TAHAP 1 — Kumpulkan nada dari DOT yang user taruh saja:
-//   dotNotes = { _note(string, fret) untuk setiap dot }
-//
-// TAHAP 2 — Cek coverage:
-//   Jawaban BENAR jika dotNotes mencakup SEMUA nada chord target.
-//   (Subset check: target ⊆ dotNotes)
-//
-//   Open string yang tidak di-mute DIABAIKAN dalam validasi —
-//   user tidak perlu mute secara eksplisit.
-//   Hanya dot yang dipasang user yang dievaluasi.
-//
-// Dengan ini:
-//   • C major (C E G): user pasang 3 dot yang menghasilkan C, E, G → BENAR ✓
-//   • Bm barre: user pasang dot di string 1-5 sesuai barre,
-//     string 0 open E dibiarkan → TETAP BENAR karena hanya dot yang dihitung ✓
-//   • Tidak bisa curang dengan pasang 1 dot saja karena semua nada chord harus ada ✓
-// ─────────────────────────────────────────────────────────────────────────────
 bool _validate({
   required ChordModel chord,
   required List<FingerPosition> dots,
@@ -875,39 +849,31 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
         const SizedBox(height: 8),
 
         // ── Fretboard area ───────────────────────────────────────────────
+        // Container & style dihandle langsung oleh InteractiveFretboardWidget
+        // agar visual konsisten dengan ChordFretboardWidget di seluruh fitur.
         Expanded(child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: FadeTransition(
             opacity: _fadeAnim,
-            child: Container(
-              decoration: BoxDecoration(
-                color: _card,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: accent.withValues(alpha: 0.12)),
-              ),
-              padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
-              child: Column(children: [
-                _buildMuteRow(accent),
-                const SizedBox(height: 4),
-                Expanded(child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(child: InteractiveFretboardWidget(
-                      placedDots:   _renderDots,
-                      mutedStrings: _muted,
-                      onTap:        _onTap,
-                      reviewMode:   _isReviewing,
-                      reviewColors: revColors,
-                      baseFret:     _baseFret,
-                      barres:       _renderBarres,
-                    )),
-                    _buildFretNav(accent),
-                  ],
-                )),
-                if (_isReviewing && !_isCorrect && _chord != null)
-                  _buildRefPanel(accent),
-              ]),
-            ),
+            child: Column(children: [
+              Expanded(child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: InteractiveFretboardWidget(
+                    placedDots:   _renderDots,
+                    mutedStrings: _muted,
+                    onTap:        _onTap,
+                    reviewMode:   _isReviewing,
+                    reviewColors: revColors,
+                    baseFret:     _baseFret,
+                    barres:       _renderBarres,
+                  )),
+                  _buildFretNav(accent),
+                ],
+              )),
+              if (_isReviewing && !_isCorrect && _chord != null)
+                _buildRefPanel(accent),
+            ]),
           ),
         )),
 
@@ -996,37 +962,6 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
         child: Text(widget.level.difficulty,
             style: TextStyle(color: accent, fontSize: 11, fontWeight: FontWeight.bold)),
       );
-
-  Widget _buildMuteRow(Color accent) {
-    const labels = ['E', 'A', 'D', 'G', 'B', 'e'];
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: List.generate(6, (i) {
-          final m = _muted[i];
-          return GestureDetector(
-            onTap: () => _toggleMute(i),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 36, height: 28,
-              decoration: BoxDecoration(
-                color: m ? _red.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.04),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: m ? _red.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.08),
-                ),
-              ),
-              child: Center(child: Text(m ? '✕' : labels[i],
-                  style: TextStyle(
-                      color: m ? _red : Colors.white38,
-                      fontSize: 12, fontWeight: FontWeight.bold))),
-            ),
-          );
-        }),
-      ),
-    );
-  }
 
   Widget _buildFretNav(Color accent) {
     return Padding(

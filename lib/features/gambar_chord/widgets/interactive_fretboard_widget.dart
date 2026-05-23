@@ -56,46 +56,103 @@ class InteractiveFretboardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      final w = constraints.maxWidth;
-      final h = constraints.maxHeight;
-
-      // Koordinat identik dengan painter
-      final usableW   = w - _leftPad - _rightPad;
-      final usableH   = h - _topPad  - _bottomPad;
-      final strSp     = usableW / (_strings - 1);
-      final fretSp    = usableH / _frets;
-
-      return GestureDetector(
-        onTapDown: reviewMode
-            ? null
-            : (d) {
-                final dx = d.localPosition.dx - _leftPad;
-                final dy = d.localPosition.dy - _topPad;
-
-                // string: cari yang paling dekat (round)
-                final s = (dx / strSp).round().clamp(0, _strings - 1);
-                // fret row: floor, clamp agar tidak out-of-bound
-                final row = (dy / fretSp).floor().clamp(0, _frets - 1);
-
-                HapticFeedback.selectionClick();
-                onTap(s, baseFret + row);
-              },
-        child: RepaintBoundary(
-          child: CustomPaint(
-            size: Size(w, h),
-            painter: _InteractivePainter(
-              placedDots:   placedDots,
-              mutedStrings: mutedStrings,
-              reviewColors: reviewColors,
-              barres:       barres,
-              baseFret:     baseFret,
-            ),
-          ),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.cyanAccent.withValues(alpha: 0.3),
+          width: 1,
         ),
-      );
-    });
+        boxShadow: [
+          BoxShadow(
+            color: Colors.cyanAccent.withValues(alpha: 0.08),
+            blurRadius: 30,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ── Baris X / O — identik dengan ChordFretboardWidget ─────────
+          _buildTopRow(),
+          const SizedBox(height: 4),
+          // ── Fretboard painter ──────────────────────────────────────────
+          Expanded(
+            child: LayoutBuilder(builder: (context, constraints) {
+              final w = constraints.maxWidth;
+              final h = constraints.maxHeight;
+
+              final usableW = w - _leftPad - _rightPad;
+              final usableH = h - _topPad  - _bottomPad;
+              final strSp   = usableW / (_strings - 1);
+              final fretSp  = usableH / _frets;
+
+              return GestureDetector(
+                onTapDown: reviewMode
+                    ? null
+                    : (d) {
+                        final dx = d.localPosition.dx - _leftPad;
+                        final dy = d.localPosition.dy - _topPad;
+                        final s   = (dx / strSp).round().clamp(0, _strings - 1);
+                        final row = (dy / fretSp).floor().clamp(0, _frets - 1);
+                        HapticFeedback.selectionClick();
+                        onTap(s, baseFret + row);
+                      },
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    size: Size(w, h),
+                    painter: _InteractivePainter(
+                      placedDots:   placedDots,
+                      mutedStrings: mutedStrings,
+                      reviewColors: reviewColors,
+                      barres:       barres,
+                      baseFret:     baseFret,
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+
+        ],
+      ),
+    );
   }
+
+  // ── Baris X / O ────────────────────────────────────────────────────────
+  Widget _buildTopRow() {
+    const labels = ['E', 'A', 'D', 'G', 'B', 'e'];
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: List.generate(_strings, (i) {
+        final String symbol;
+        final Color  color;
+        if (mutedStrings.length > i && mutedStrings[i]) {
+          symbol = '✕';
+          color  = Colors.redAccent;
+        } else {
+          final hasDot = placedDots.any((d) => d.string == i) ||
+              barres.any((b) => i >= b.startString && i <= b.endString);
+          symbol = hasDot ? labels[i] : '○';
+          color  = hasDot ? Colors.white54 : Colors.white70;
+        }
+        return SizedBox(
+          width: 28,
+          child: Center(
+            child: Text(symbol,
+                style: TextStyle(
+                    color: color,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold)),
+          ),
+        );
+      }),
+    );
+  }
+
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
