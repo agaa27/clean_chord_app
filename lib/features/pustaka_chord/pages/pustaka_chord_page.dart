@@ -159,10 +159,13 @@ class _PustakaChordPageState extends State<PustakaChordPage>
                     itemCount: chord.shapes.length,
                     onPageChanged: (i) =>
                         setState(() => _currentShapeIndex = i),
-                    itemBuilder: (ctx, i) => Center(
-                      child: ChordFretboardWidget(
-                        shape: chord.shapes[i],
-                        chordName: _chordLabel,
+                    itemBuilder: (ctx, i) => Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Center(
+                        child: ChordFretboardWidget(
+                          shape: chord.shapes[i],
+                          chordName: _chordLabel,
+                        ),
                       ),
                     ),
                   )
