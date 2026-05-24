@@ -391,20 +391,11 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     });
     _resultCtrl.reset();
     _resultCtrl.forward();
-
-    final delay = ok
-        ? const Duration(milliseconds: 2000)
-        : const Duration(milliseconds: 9000);
-
-    Future.delayed(delay, () {
-      if (!mounted || _isGameOver || _reviewCompleted) return;
-      _nextQuestion();
-    });
   }
 
-  // ── Skip review (jawaban salah) ───────────────────────────────────────────
+  // ── Lanjut manual (user tekan tombol) ────────────────────────────────────
   void _skipReview() {
-    if (!_isReviewing || _isCorrect || _reviewCompleted) return;
+    if (!_isReviewing || _reviewCompleted) return;
     _reviewCompleted = true;
     _nextQuestion();
   }
@@ -944,16 +935,16 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _isReviewing
                         ? (_isCorrect
-                            ? Colors.white.withValues(alpha: 0.05)
+                            ? _green.withValues(alpha: 0.12)
                             : _red.withValues(alpha: 0.12))
                         : accent.withValues(alpha: 0.15),
                     foregroundColor: _isReviewing
-                        ? (_isCorrect ? Colors.white38 : _red)
+                        ? (_isCorrect ? _green : _red)
                         : accent,
                     side: BorderSide(
                       color: _isReviewing
                           ? (_isCorrect
-                              ? Colors.white.withValues(alpha: 0.1)
+                              ? _green.withValues(alpha: 0.5)
                               : _red.withValues(alpha: 0.5))
                           : accent,
                       width: 1.5,
@@ -962,13 +953,10 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                     elevation: 0,
                   ),
                   onPressed: _isReviewing
-                      ? (_isCorrect ? null : _skipReview)
+                      ? _skipReview
                       : _submit,
                   child: Text(
-                    // FIX #13: ganti "Menilai..." → "Lanjut otomatis..." agar lebih jelas
-                    _isReviewing
-                        ? (_isCorrect ? 'Lanjut otomatis...' : 'Lanjut →')
-                        : 'SELESAI',
+                    _isReviewing ? 'Lanjut →' : 'SELESAI',
                     style: const TextStyle(fontWeight: FontWeight.bold,
                         letterSpacing: 2, fontSize: 14),
                   ),
