@@ -41,10 +41,9 @@ class InteractiveFretboardWidget extends StatelessWidget {
   static const int    _frets      = 5;
   // Padding IDENTIK dengan ChordFretboardWidget._FretboardPainter
   static const double _leftPad    = 24.0;
-  // FIX: rightPad dinaikkan 10→18 agar dot glow (radius 16) tidak overflow kanan
-  static const double _rightPad   = 18.0;
+  static const double _rightPad   = 14.0;  // glow radius 12 + 2px margin
   static const double _topPad     =  8.0;
-  static const double _bottomPad  =  4.0;
+  static const double _bottomPad  = 14.0;  // glow radius 12 + 2px margin
 
   const InteractiveFretboardWidget({
     super.key,
@@ -78,7 +77,8 @@ class InteractiveFretboardWidget extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
+      child: ClipRect(
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // FIX #12: Baris X / O sekarang tappable untuk toggle mute
@@ -123,6 +123,7 @@ class InteractiveFretboardWidget extends StatelessWidget {
           ),
 
         ],
+        ),
       ),
     );
   }
@@ -186,10 +187,9 @@ class _InteractivePainter extends CustomPainter {
   static const int    _strings   = 6;
   static const int    _frets     = 5;
   static const double _leftPad   = 24.0;
-  // FIX: rightPad dinaikkan 10→18, sinkron dengan widget constants di atas
-  static const double _rightPad  = 18.0;
+  static const double _rightPad  = 14.0;   // glow radius 12 + 2px margin
   static const double _topPad    =  8.0;
-  static const double _bottomPad =  4.0;
+  static const double _bottomPad = 14.0;   // glow radius 12 + 2px margin
 
   const _InteractivePainter({
     required this.placedDots,
@@ -346,12 +346,12 @@ class _InteractivePainter extends CustomPainter {
           : _fingerColor(dot.finger > 0 ? dot.finger : 2);
 
       // Glow
-      canvas.drawCircle(Offset(dx, dy), 16,
+      canvas.drawCircle(Offset(dx, dy), 12,
           Paint()
             ..color      = color.withValues(alpha: 0.25)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5));
       // Dot
-      canvas.drawCircle(Offset(dx, dy), 13, Paint()..color = color);
+      canvas.drawCircle(Offset(dx, dy), 10, Paint()..color = color);
       // Nomor jari
       if (dot.finger > 0) {
         _text(canvas, '${dot.finger}', Offset(dx, dy),

@@ -260,7 +260,7 @@ class _FretboardPainter extends CustomPainter {
   // Rasio terhadap tinggi canvas. Pakai const agar mudah di-tune.
   static const double _kTopPadR    = 0.025;  // breathing room atas
   static const double _kTopRowR    = 0.085;  // zona ○/✕ — lebih compact dari 0.10
-  static const double _kBottomPadR = 0.025;  // breathing room bawah
+  static const double _kBottomPadR = 0.09;   // breathing room bawah — min dotR aman
 
   // ── Konstanta visual ────────────────────────────────────────────────────
   static const double _kLabelFontSz  = 11.5;
@@ -308,7 +308,7 @@ class _FretboardPainter extends CustomPainter {
     // ── 2. Zona vertikal ───────────────────────────────────────────────────
     final double topPad      = size.height * _kTopPadR;
     final double topRowH     = size.height * _kTopRowR;
-    final double bottomPad   = size.height * _kBottomPadR;
+    final double bottomPad   = (size.height * _kBottomPadR).clamp(_kDotRMax + 2.0, double.infinity);
     final double gridOriginY = topPad + topRowH;
     final double gridH       = size.height - gridOriginY - bottomPad;
 

@@ -23,128 +23,156 @@ String _fmtChord(ChordModel c) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tuning standar gitar — semitone dari C=0
-// index: 0=low E  1=A  2=D  3=G  4=B  5=high e
+// SHAPE-EXACT VALIDATION
+//
+// Validasi dilakukan dengan membandingkan fret per-string secara identik
+// terhadap chord.shapes.first.frets — BUKAN berbasis teori nada/interval.
+//
+// Konvensi frets[s]:
+//   -1 = string di-mute (X)
+//    0 = open string (O)
+//   >0 = nomor fret absolut yang ditekan
+//
+// String order: index 0=low E, 1=A, 2=D, 3=G, 4=B, 5=high e
+//
+// BARRE HANDLING:
+//   BarreInferencer memisahkan dots user menjadi:
+//     remainingDots  = dot individual (non-barre)
+//     barres         = barre coverage (fret, startString..endString)
+//   Karena string yang di-cover barre TIDAK ada di _dots asli,
+//   kita harus expand barres ke dalam fret array sebelum membandingkan.
 // ─────────────────────────────────────────────────────────────────────────────
-const _openSemitones = [4, 9, 2, 7, 11, 4]; // E A D G B E
-const _noteNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
-/// Nada dari senar [s] ditekan di [fret]. fret=0 → open string.
-String _note(int s, int fret) => _noteNames[(_openSemitones[s] + fret) % 12];
+/// Bangun array fret user sepanjang 6 (satu per string) dari [dots], [muted],
+/// dan [barres] (hasil BarreInferencer).
+///
+/// Output identik format dengan ChordShapeModel.frets:
+///   -1 → string di-mute
+///    0 → open string
+///   >0 → fret absolut yang ditekan user (termasuk fret barre)
+List<int> _buildUserFrets(
+  List<FingerPosition> dots,
+  List<bool> muted,
+  List<BarreInfo> barres,
+) {
+  final result = List<int>.filled(6, 0); // default: open string
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Interval per tipe chord (semitone dari root)
-// ─────────────────────────────────────────────────────────────────────────────
-const _chordIntervals = <String, List<int>>{
-  'major': [0, 4, 7],
-  'minor': [0, 3, 7],
-  '7':     [0, 4, 7, 10],
-  'maj7':  [0, 4, 7, 11],
-  'm7':    [0, 3, 7, 10],
-  'sus4':  [0, 5, 7],
-  'add9':  [0, 2, 4, 7],
-  '5':     [0, 7],
-};
-
-Set<String> _chordNotes(ChordModel c) {
-  final iv   = _chordIntervals[c.type];
-  if (iv == null) return {};
-  final root = _noteNames.indexOf(c.root);
-  if (root == -1) return {};
-  return iv.map((i) => _noteNames[(root + i) % 12]).toSet();
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Expand barre strings menjadi effectiveDots.
-// FIX #3: Hapus syarat "hasGap || hasInterior" — barre sekarang terdeteksi
-// semata-mata dari span >= 4, tidak peduli apakah user tap setiap string
-// satu per satu atau meninggalkan gap.
-// ─────────────────────────────────────────────────────────────────────────────
-List<FingerPosition> _expandBarre(List<FingerPosition> dots) {
-  final Map<int, List<int>> byFret = {};
-  for (final d in dots) {
-    byFret.putIfAbsent(d.fret, () => []).add(d.string);
-  }
-
-  if (byFret.isEmpty) return dots;
-
-  final fretMin = byFret.keys.reduce((a, b) => a < b ? a : b);
-  final anchors = List<int>.from(byFret[fretMin]!)..sort();
-
-  if (anchors.length < 2) return dots;
-
-  final sMin = anchors.first;
-  final sMax = anchors.last;
-  final span = sMax - sMin + 1;
-
-  // FIX #3: span >= 4 cukup — tidak perlu lagi syarat hasGap/hasInterior.
-  // Ini menangani kasus user tap semua string rapi di fret yang sama.
-  if (span < 4) return dots;
-
-  final tappedStrings = dots.map((d) => d.string).toSet();
-  final expanded = List<FingerPosition>.from(dots);
-  for (int s = sMin; s <= sMax; s++) {
-    if (!tappedStrings.contains(s)) {
-      expanded.add(FingerPosition(string: s, fret: fretMin, finger: 1));
-    }
-  }
-  return expanded;
-}
-
-bool _validate({
-  required ChordModel chord,
-  required List<FingerPosition> dots,
-  required List<bool> muted,
-}) {
-  final target = _chordNotes(chord);
-  if (target.isEmpty) return false;
-
-  // Expand barre strings
-  final effectiveDots = _expandBarre(dots);
-
-  // ── Kumpulkan nada dari effectiveDots + open string relevan ──────────────
-  final playedNotes   = <String>{};
-  final stringWithDot = effectiveDots.map((d) => d.string).toSet();
-
-  for (final d in effectiveDots) {
-    if (!muted[d.string]) {
-      playedNotes.add(_note(d.string, d.fret));
-    }
-  }
-
-  // Open string: hanya jika notanya ada di target (cegah false positive)
+  // 1. Tandai string yang di-mute (prioritas tertinggi)
   for (int s = 0; s < 6; s++) {
-    if (!muted[s] && !stringWithDot.contains(s)) {
-      final openNote = _note(s, 0);
-      if (target.contains(openNote)) {
-        playedNotes.add(openNote);
+    if (muted.length > s && muted[s]) result[s] = -1;
+  }
+
+  // 2. Isi string yang di-cover barre
+  //    (barre inferencer sudah memastikan fret ini absolut)
+  for (final b in barres) {
+    for (int s = b.startString; s <= b.endString; s++) {
+      if (s < 6 && result[s] != -1) {
+        result[s] = b.fret;
       }
     }
   }
 
-  if (playedNotes.isEmpty) return false;
+  // 3. Isi dot individual (menang atas barre jika string sama,
+  //    karena dot individual = jari yang ditekan lebih tinggi dari barre)
+  for (final d in dots) {
+    if (d.string < 6 && result[d.string] != -1) {
+      result[d.string] = d.fret;
+    }
+  }
 
-  // Semua nada chord harus tercakup — extra note tidak masalah
-  return target.every((n) => playedNotes.contains(n));
+  return result;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FIX #5: _buildReviewColors kini juga expand barre strings sehingga
-// string tengah barre mendapat warna hijau/merah yang tepat.
-// ─────────────────────────────────────────────────────────────────────────────
+/// Perbandingan list integer elemen-per-elemen — tidak ada toleransi.
+bool _listEquals(List<int> a, List<int> b) {
+  if (a.length != b.length) return false;
+  for (int i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
+/// Bandingkan satu string: apakah nilai user cocok dengan target?
+/// Toleransi khusus:
+///   target == -1 (mute) → terima jika user -1 (eksplisit mute) ATAU
+///                          user  0  (string tidak disentuh sama sekali),
+///                          karena string yang tidak dimainkan ≈ muted.
+bool _stringMatch(int targetVal, int userVal) {
+  if (targetVal == userVal) return true;
+  if (targetVal == -1 && userVal == 0) return true; // untouched ≈ muted
+  return false;
+}
+
+/// Validasi SHAPE MATCH: user WAJIB menempatkan fret identik
+/// dengan SALAH SATU dari chord.shapes[n].frets.
+/// Memeriksa SEMUA shape agar voicing alternatif diterima.
+/// [barres] berasal dari BarreInferencer.infer(_dots).barres.
+bool _validate({
+  required ChordModel chord,
+  required List<FingerPosition> dots,
+  required List<bool> muted,
+  required List<BarreInfo> barres,
+}) {
+  final userFrets = _buildUserFrets(dots, muted, barres);
+  for (final shape in chord.shapes) {
+    if (shape.frets.length != userFrets.length) continue;
+    bool allMatch = true;
+    for (int s = 0; s < shape.frets.length; s++) {
+      if (!_stringMatch(shape.frets[s], userFrets[s])) {
+        allMatch = false;
+        break;
+      }
+    }
+    if (allMatch) return true;
+  }
+  return false;
+}
+
+/// Bangun reviewColors dengan membandingkan per-string terhadap shape target
+/// TERBAIK yang paling mendekati input user.
+/// Hijau  = string user cocok dengan target fret.
+/// Merah  = string user berbeda dari target fret.
 Map<int, Color> _buildReviewColors({
   required ChordModel chord,
   required List<FingerPosition> dots,
   required List<bool> muted,
+  required List<BarreInfo> barres,
 }) {
-  final target       = _chordNotes(chord);
-  final effectiveDots = _expandBarre(dots);
-  final result       = <int, Color>{};
+  final userFrets = _buildUserFrets(dots, muted, barres);
 
-  for (final d in effectiveDots) {
-    if (muted[d.string]) continue;
-    final ok  = target.contains(_note(d.string, d.fret));
-    result[d.string] = ok ? const Color(0xFF00E676) : const Color(0xFFFF4C4C);
+  // Cari shape terbaik: shape dengan jumlah string cocok terbanyak
+  // (gunakan _stringMatch agar toleransi mute konsisten dengan _validate)
+  List<int> bestTarget = chord.shapes.first.frets;
+  int bestMatches = 0;
+  for (final shape in chord.shapes) {
+    int matches = 0;
+    for (int s = 0; s < 6; s++) {
+      final uv = userFrets[s];
+      final tv = s < shape.frets.length ? shape.frets[s] : 0;
+      if (_stringMatch(tv, uv)) matches++;
+    }
+    if (matches > bestMatches) {
+      bestMatches = matches;
+      bestTarget  = shape.frets;
+    }
+  }
+
+  final result = <int, Color>{};
+  for (int s = 0; s < 6; s++) {
+    final userVal   = userFrets[s];
+    final targetVal = s < bestTarget.length ? bestTarget[s] : 0;
+    final match     = _stringMatch(targetVal, userVal);
+
+    final userHasDot    = dots.any((d) => d.string == s);
+    final userInBarre   = barres.any(
+      (b) => s >= b.startString && s <= b.endString,
+    );
+    final userMuted     = muted.length > s && muted[s];
+    final targetNonOpen = s < bestTarget.length && bestTarget[s] != 0;
+
+    if (userHasDot || userInBarre || userMuted || targetNonOpen) {
+      result[s] = match ? const Color(0xFF00E676) : const Color(0xFFFF4C4C);
+    }
   }
   return result;
 }
@@ -349,7 +377,12 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
   void _submit() {
     if (_isReviewing || _chord == null) return;
 
-    final ok = _validate(chord: _chord!, dots: _dots, muted: _muted);
+    final ok = _validate(
+      chord:  _chord!,
+      dots:   _dots,
+      muted:  _muted,
+      barres: _inferredBarre.barres,
+    );
 
     if (ok) {
       HapticFeedback.lightImpact();
@@ -629,22 +662,26 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                 ),
                 itemBuilder: (_, i) {
                   final c = previews[i];
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: _card,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: accent.withValues(alpha: 0.1)),
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: _card,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: accent.withValues(alpha: 0.1)),
+                      ),
+                      padding: const EdgeInsets.fromLTRB(4, 10, 4, 8),
+                      child: Column(children: [
+                        Text(_fmtChord(c), style: TextStyle(
+                            color: accent, fontSize: 14, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Expanded(child: ClipRect(child: FittedBox(
+                          fit: BoxFit.contain,
+                          alignment: Alignment.topCenter,
+                          child: ChordFretboardWidget(shape: c.shapes.first, chordName: ''),
+                        ))),
+                      ]),
                     ),
-                    padding: const EdgeInsets.fromLTRB(4, 10, 4, 6),
-                    child: Column(children: [
-                      Text(_fmtChord(c), style: TextStyle(
-                          color: accent, fontSize: 14, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Expanded(child: ClipRect(child: FittedBox(
-                        fit: BoxFit.contain,
-                        child: ChordFretboardWidget(shape: c.shapes.first, chordName: ''),
-                      ))),
-                    ]),
                   );
                 },
               ),
@@ -680,7 +717,12 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
     final accent    = _accent;
     final timeLow   = _timeLeft <= (_duration ~/ 5).clamp(5, 12);
     final revColors = _isReviewing && _chord != null
-        ? _buildReviewColors(chord: _chord!, dots: _dots, muted: _muted)
+        ? _buildReviewColors(
+            chord:  _chord!,
+            dots:   _dots,
+            muted:  _muted,
+            barres: _inferredBarre.barres,
+          )
         : <int, Color>{};
 
     return Scaffold(
@@ -802,17 +844,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                       fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 1.5,
                     ),
                   ),
-                  if (!_isReviewing) ...[
-                    const SizedBox(width: 10),
-                    Flexible(
-                      child: Text(
-                        _chordNotes(_chord!).join(' '),
-                        style: TextStyle(color: accent.withValues(alpha: 0.45), fontSize: 11),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                    ),
-                  ],
+
                   if (_isReviewing) ...[
                     const SizedBox(width: 10),
                     ScaleTransition(
@@ -854,14 +886,13 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                 ],
               )),
               if (_isReviewing && !_isCorrect && _chord != null)
-                // FIX-OVERFLOW: bungkus dengan AnimatedContainer height eksplisit.
-                // Tanpa ini, Column(parent Expanded) tidak tahu berapa ruang yang
-                // diambil panel → meluap ke bawah. AnimatedContainer memberikan
-                // definite height sehingga Expanded(Row fretboard) mendapat sisa
-                // ruang yang tepat, BUKAN dibagi 50/50 seperti Flexible.
+                // AnimatedContainer dibatasi ukurannya dengan ConstrainedBox
+                // agar tidak pernah overflow — max height 210 beri margin aman.
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
-                  height: _showAnswerPanel ? 216 : 44,
+                  height: _showAnswerPanel ? 202 : 40,
+                  clipBehavior: Clip.hardEdge,
+                  decoration: const BoxDecoration(),
                   child: _buildRefPanel(accent),
                 ),
             ]),
@@ -1001,51 +1032,62 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
       );
 
   Widget _buildRefPanel(Color accent) {
-    final chord = _chord!;
-    final notes = _chordNotes(chord);
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      margin: const EdgeInsets.fromLTRB(4, 8, 4, 4),
+    final chord      = _chord!;
+    final shapeFrets = chord.shapes.first.frets;
+    final fretsHint  = shapeFrets.map((f) => f == -1 ? 'X' : '$f').join(' ');
+
+    // Panel ini di-clip oleh outer AnimatedContainer (Clip.hardEdge).
+    // Tidak perlu AnimatedContainer di sini — cukup satu Container statis.
+    // Semua ukuran harus pas dengan height di outer: collapsed=40, expanded=198.
+    return Container(
+      // margin top+bottom = 0 agar tidak menambah height di luar perhitungan outer
+      margin: const EdgeInsets.fromLTRB(4, 0, 4, 0),
       decoration: BoxDecoration(
         color: _red.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _red.withValues(alpha: 0.2)),
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: MainAxisSize.max,
         children: [
-          InkWell(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-            onTap: () => setState(() => _showAnswerPanel = !_showAnswerPanel),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(children: [
-                Icon(Icons.lightbulb_outline_rounded, color: _red, size: 14),
-                const SizedBox(width: 8),
-                Text('Nada: ${notes.join('  ')}',
-                    style: const TextStyle(color: Colors.white54, fontSize: 11)),
-                const Spacer(),
-                Text(
-                  _showAnswerPanel ? 'Sembunyikan contoh' : 'Lihat contoh posisi',
-                  style: TextStyle(color: _red, fontSize: 11),
-                ),
-                Icon(
-                  _showAnswerPanel ? Icons.expand_less_rounded : Icons.expand_more_rounded,
-                  color: _red, size: 16,
-                ),
-              ]),
+          // Header: tinggi FIXED 40px agar collapsed height = 40 tepat
+          SizedBox(
+            height: 40,
+            child: InkWell(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+              onTap: () => setState(() => _showAnswerPanel = !_showAnswerPanel),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(children: [
+                  Icon(Icons.lightbulb_outline_rounded, color: _red, size: 14),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Frets: $fretsHint',
+                      style: const TextStyle(color: Colors.white54, fontSize: 11),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    _showAnswerPanel ? 'Sembunyikan' : 'Lihat contoh',
+                    style: TextStyle(color: _red, fontSize: 11),
+                  ),
+                  Icon(
+                    _showAnswerPanel
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    color: _red, size: 16,
+                  ),
+                ]),
+              ),
             ),
           ),
-          if (_showAnswerPanel)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-              // FIX-OVERFLOW: tambahkan ClipRect agar glow/painter ChordFretboardWidget
-              // tidak bleeding secara visual ke luar area panel.
-              // SizedBox(h:160) sudah memberikan tight height ke FittedBox;
-              // overflow layout dicegah oleh AnimatedContainer wrapper di atasnya.
-              child: ClipRect(
-                child: SizedBox(
-                  height: 160,
+          if (_showAnswerPanel) ...[
+            const SizedBox(height: 4),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+                child: ClipRect(
                   child: FittedBox(
                     fit: BoxFit.contain,
                     child: ChordFretboardWidget(
@@ -1056,6 +1098,7 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                 ),
               ),
             ),
+          ],
         ],
       ),
     );
