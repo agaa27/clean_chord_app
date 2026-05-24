@@ -10,22 +10,31 @@ const _kFingerColors = <int, Color>{
   3: Color(0xFF00E676),
   4: Color(0xFFFFAA00),
 };
-
 Color _fingerColor(int finger) => _kFingerColors[finger] ?? Colors.grey;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Widget utama
+// ChordFretboardWidget
 //
-// FIX OVERFLOW:
-//   • LayoutBuilder dipakai untuk mendapatkan lebar tersedia → Container
-//     tidak pernah melebihi lebar layar.
-//   • Lebar widget dibatasi: min(tersedia - 32, 300) sehingga responsif di
-//     layar sempit maupun lebar.
-//   • Tinggi CustomPaint dihitung dari lebar aktual via AspectRatio (4:5)
-//     sehingga tidak overflow vertikal di layar kecil.
-//   • Column dibungkus SingleChildScrollView → bila konten legend panjang
-//     tetap scrollable, tidak overflow.
-//   • RepaintBoundary tetap dipertahankan untuk efisiensi repaint.
+// ARSITEKTUR LAYOUT — single source of truth untuk semua elemen:
+//
+//  Canvas dibagi menjadi zona-zona:
+//
+//  ┌──────────┬───────────────────────────────────┬──────────┐
+//  │annotZone │          gridZone                 │ rightPad │
+//  │          │  topRow: ○ / ✕                    │          │
+//  │  "Nfr"   │──────────────────────────────────│          │
+//  │          │  nut / frets / strings            │          │
+//  │          │  barre + dots                     │          │
+//  └──────────┴───────────────────────────────────┴──────────┘
+//
+//  KEY DESIGN PRINCIPLE (mengatasi overlap):
+//  ─────────────────────────────────────────
+//  annotZone lebar = _kAnnotW + _kAnnotGap + dotRMax
+//  Ini menjamin string ke-0 (sx(0) = gridOriginX) selalu berjarak
+//  minimal dotRMax dari tepi kanan annotZone, sehingga dot terkiri
+//  TIDAK PERNAH memasuki annotZone secara visual, bahkan dengan glow.
+//
+//  SEMUA elemen pakai sx(i) / fy(row) yang identik → zero misalignment.
 // ─────────────────────────────────────────────────────────────────────────────
 class ChordFretboardWidget extends StatelessWidget {
   final ChordShapeModel shape;
@@ -41,64 +50,63 @@ class ChordFretboardWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Lebar widget: maks 300, min sesuai ruang tersedia dikurangi margin
         final double cardWidth =
             (constraints.maxWidth - 32).clamp(0.0, 300.0);
 
         return Center(
-          child: SingleChildScrollView(
-            physics: const NeverScrollableScrollPhysics(),
-            child: Container(
-              width: cardWidth,
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF111111),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: Colors.cyanAccent.withOpacity(0.3),
-                  width: 1,
+          child: Container(
+            width: cardWidth,
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF111111),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: Colors.cyanAccent.withOpacity(0.3),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.cyanAccent.withOpacity(0.08),
+                  blurRadius: 30,
+                  spreadRadius: 2,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.cyanAccent.withOpacity(0.08),
-                    blurRadius: 30,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (chordName.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Text(
-                        chordName,
-                        style: const TextStyle(
-                          color: Colors.cyanAccent,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                    ),
-                  _buildTopRow(cardWidth),
-                  const SizedBox(height: 4),
-                  // Tinggi fretboard diturunkan dari lebar via AspectRatio (4:5)
-                  // → tidak pernah overflow vertikal
-                  RepaintBoundary(
-                    child: AspectRatio(
-                      aspectRatio: 4 / 5,
-                      child: CustomPaint(
-                        size: Size.infinite,
-                        painter: _FretboardPainter(shape: shape),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ── Chord name ──────────────────────────────────────────
+                if (chordName.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Text(
+                      chordName,
+                      style: const TextStyle(
+                        color: Colors.cyanAccent,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 2,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  _buildFingerLegend(),
-                ],
-              ),
+
+                // ── Fretboard ────────────────────────────────────────────
+                // AspectRatio 4:5 → lebih natural, mirip GuitarTuna/Ultimate Guitar.
+                // Lebih lebar relatif terhadap tingginya vs 3:4 yang terlalu "portrait".
+                RepaintBoundary(
+                  child: AspectRatio(
+                    aspectRatio: 4 / 5,
+                    child: CustomPaint(
+                      size: Size.infinite,
+                      painter: _FretboardPainter(shape: shape),
+                    ),
+                  ),
+                ),
+
+                // ── Finger legend ───────────────────────────────────────
+                const SizedBox(height: 10),
+                _buildFingerLegend(),
+              ],
             ),
           ),
         );
@@ -106,42 +114,7 @@ class ChordFretboardWidget extends StatelessWidget {
     );
   }
 
-  // ── Baris X / O ────────────────────────────────────────────────────────
-  Widget _buildTopRow(double cardWidth) {
-    // Lebar tiap kolom proporsional terhadap lebar card aktual
-    final double colW = ((cardWidth - 32) / 6).clamp(20.0, 36.0);
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: List.generate(6, (i) {
-        final fret = shape.frets[i];
-        String symbol = '';
-        Color color = Colors.white70;
-        if (fret == -1) {
-          symbol = '✕';
-          color = Colors.redAccent;
-        } else if (fret == 0) {
-          symbol = '○';
-        }
-        return SizedBox(
-          width: colW,
-          child: Center(
-            child: symbol.isEmpty
-                ? const SizedBox.shrink()
-                : Text(
-                    symbol,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-          ),
-        );
-      }),
-    );
-  }
-
-  // ── Legend jari ────────────────────────────────────────────────────────
+  // ── Legend jari ──────────────────────────────────────────────────────────
   Widget _buildFingerLegend() {
     final usedFingers = <int>{};
 
@@ -151,8 +124,7 @@ class ChordFretboardWidget extends StatelessWidget {
       final f = shape.fingers[i];
       if (f <= 0 || shape.frets[i] <= 0) continue;
 
-      final isBarre =
-          shape.barreFret != null &&
+      final isBarre = shape.barreFret != null &&
           shape.frets[i] == shape.barreFret &&
           shape.barreStartString != null &&
           shape.barreEndString != null &&
@@ -216,203 +188,371 @@ class ChordFretboardWidget extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Painter
+// _FretboardPainter
+//
+// ══════════════════════════════════════════════════════════════════════════════
+// GEOMETRY SYSTEM — SINGLE SOURCE OF TRUTH
+// ══════════════════════════════════════════════════════════════════════════════
+//
+//  HORIZONTAL (kiri → kanan):
+//  ┌─────────────────┬──────────────────────────────────┬──────────┐
+//  │   annotZone     │           gridZone               │rightPad  │
+//  │ 0 .. gridOriginX│ gridOriginX .. gridOriginX+gridW │          │
+//  └─────────────────┴──────────────────────────────────┴──────────┘
+//
+//    gridOriginX = _kAnnotW + _kAnnotGap + dotRMax
+//    ──────────────────────────────────────────────
+//    Ini adalah kunci anti-overlap:
+//    • _kAnnotW   = lebar teks label ("10fr" max ~28px)
+//    • _kAnnotGap = breathing room antara label dan string 0
+//    • dotRMax    = radius maksimum dot yang mungkin digambar
+//    Dengan formula ini, tepi kiri dot pada string 0 = sx(0) - dotRMax
+//    = gridOriginX - dotRMax = _kAnnotW + _kAnnotGap
+//    → selalu ada gap _kAnnotGap antara label dan tepi dot. ✓
+//
+//  VERTIKAL (atas → bawah):
+//  ┌──────────────────────────────────────────────────────────────┐
+//  │ topPad                        (breathing room atas)          │
+//  ├──────────────────────────────────────────────────────────────┤
+//  │ topRowH                       (○/✕ zone)                     │
+//  ├──────────────────────────────────────────────────────────────┤ ← gridOriginY (= nut line Y)
+//  │ gridH = fretSp × _kFrets      (fretboard zone)               │
+//  ├──────────────────────────────────────────────────────────────┤
+//  │ bottomPad                     (breathing room bawah)         │
+//  └──────────────────────────────────────────────────────────────┘
+//
+//  HELPERS:
+//    sx(i)   = gridOriginX + i × strSp     → X tengah string ke-i
+//    fy(row) = gridOriginY + (row+0.5)×fretSp → Y tengah fret row
+//
+//  Semua elemen — nut, fret lines, string lines, barre, dots,
+//  open/mute indicators, base fret label — menggunakan sx/fy yang sama.
+//  Tidak ada offset ad-hoc per elemen atau per chord.
 // ─────────────────────────────────────────────────────────────────────────────
 class _FretboardPainter extends CustomPainter {
   final ChordShapeModel shape;
 
   const _FretboardPainter({required this.shape});
 
-  static const int _strings = 6;
-  static const int _frets = 5;
+  // ── Konstanta struktur ──────────────────────────────────────────────────
+  static const int _kStrings = 6;
+  static const int _kFrets   = 5;
+
+  // ── Konstanta annotZone ─────────────────────────────────────────────────
+  // _kAnnotW: lebar teks label basefret (e.g. "10fr" ≈ 28px @ fontSize 11.5)
+  // Dibuat cukup untuk worst-case 2-digit fret number.
+  static const double _kAnnotW   = 30.0;
+
+  // _kAnnotGap: jarak minimum antara tepi kanan label dan tepi kiri dot string-0.
+  // Ini adalah optical safety margin — semakin besar semakin aman.
+  static const double _kAnnotGap = 8.0;
+
+  // _kDotRMax: radius maksimum dot. Dipakai untuk menghitung gridOriginX.
+  // HARUS KONSISTEN dengan perhitungan dotR di bawah agar anti-overlap valid.
+  // dotR = (strSp * 0.42).clamp(7.0, _kDotRMax)
+  static const double _kDotRMax  = 14.0;
+
+  // _kLeftPadOpen: padding kiri minimal saat tidak ada annotZone (baseFret == 1).
+  // Memberi sedikit breathing room agar fretboard tidak menempel tepi kiri card.
+  static const double _kLeftPadOpen = 8.0;
+
+  // ── Konstanta layout vertikal ───────────────────────────────────────────
+  // Rasio terhadap tinggi canvas. Pakai const agar mudah di-tune.
+  static const double _kTopPadR    = 0.025;  // breathing room atas
+  static const double _kTopRowR    = 0.085;  // zona ○/✕ — lebih compact dari 0.10
+  static const double _kBottomPadR = 0.025;  // breathing room bawah
+
+  // ── Konstanta visual ────────────────────────────────────────────────────
+  static const double _kLabelFontSz  = 11.5;
+  static const double _kOpenSymbolSz = 12.5;  // ukuran ○/✕
+  static const double _kBarreFontSz  = 11.5;
+
+  // Nut: tebal hanya saat fret 1 (open position), tipis saat barre position.
+  static const double _kNutThickOpen  = 3.5;  // lebih tipis dari 5.0 sebelumnya
+  static const double _kNutThickBarre = 1.5;
+
+  // String thickness: bass (i=0, kiri) lebih tebal dari treble (i=5, kanan).
+  // Urutan visual di diagram: string 0 = low E (bass), string 5 = high e (treble).
+  // strokeWidth MENURUN seiring naiknya i.
+  static double _stringThickness(int i) {
+    // Bass (i=0): ~1.8, Treble (i=5): ~0.8
+    // Linear: 1.8 - i * 0.2  → [1.8, 1.6, 1.4, 1.2, 1.0, 0.8]
+    return 1.8 - i * 0.20;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Padding dihitung relatif terhadap ukuran aktual → tidak hardcoded
-    final double leftPad = size.width * 0.10;
-    final double rightPad = size.width * 0.04;
-    final double topPad = size.height * 0.04;
-    final double bottomPad = size.height * 0.02;
+    // ── 1. Zona horizontal ─────────────────────────────────────────────────
+    //
+    //   baseFret == 1  →  tidak ada label → annotZone = 0
+    //                     gridOriginX = _kLeftPadOpen (kecil, simetris)
+    //
+    //   baseFret > 1   →  ada label "Nfr" → annotZone aktif
+    //                     gridOriginX = _kAnnotW + _kAnnotGap + _kDotRMax
+    //                     gap antara label & tepi kiri dot ≥ _kAnnotGap  ✓
+    //
+    //   rightPad selalu = _kLeftPadOpen → simetris di sisi kanan.
+    //   Open chord: kiri = kanan = _kLeftPadOpen → perfectly centered.
+    //   Barre chord: kiri lebih besar (annotZone) → grid geser kanan secukupnya.
 
-    final double usableW = size.width - leftPad - rightPad;
-    final double usableH = size.height - topPad - bottomPad;
-    final double strSp = usableW / (_strings - 1);
-    final double fretSp = usableH / _frets;
-    final double nutY = topPad;
-    final int startFret = shape.baseFret;
+    final bool   hasAnnot    = shape.baseFret > 1;
+    final double gridOriginX = hasAnnot
+        ? _kAnnotW + _kAnnotGap + _kDotRMax
+        : _kLeftPadOpen;
+    const double rightPad = _kLeftPadOpen;
+    final double gridW    = size.width - gridOriginX - rightPad;
 
-    // Dot radius proporsional terhadap string spacing
-    final double dotRadius = (strSp * 0.45).clamp(8.0, 15.0);
-    final double dotFontSize = (dotRadius * 0.9).clamp(9.0, 13.0);
+    // Pastikan gridW valid (canvas terlalu kecil → skip paint)
+    if (gridW <= 0) return;
 
-    // ── Nut / top fret ───────────────────────────────────────────────────
+    // ── 2. Zona vertikal ───────────────────────────────────────────────────
+    final double topPad      = size.height * _kTopPadR;
+    final double topRowH     = size.height * _kTopRowR;
+    final double bottomPad   = size.height * _kBottomPadR;
+    final double gridOriginY = topPad + topRowH;
+    final double gridH       = size.height - gridOriginY - bottomPad;
+
+    if (gridH <= 0) return;
+
+    // ── 3. Derived geometry ────────────────────────────────────────────────
+    final double strSp     = gridW / (_kStrings - 1);
+    final double fretSp    = gridH / _kFrets;
+    final int    startFret = shape.baseFret;
+
+    // dotR: radius dot jari.
+    // Dibatasi _kDotRMax agar konsisten dengan asumsi gridOriginX.
+    // Formula: 42% dari string spacing, clamped [7, _kDotRMax].
+    final double dotR      = (strSp * 0.42).clamp(7.0, _kDotRMax);
+    final double dotFontSz = (dotR * 0.88).clamp(8.5, 12.5);
+
+    // Glow radius untuk dot: lebih kecil dari sebelumnya agar tidak melebar jauh.
+    final double glowR = dotR + 2.5;
+
+    // ── 4. Helpers koordinat — SATU SOURCE OF TRUTH ────────────────────────
+    // Semua elemen wajib menggunakan sx() dan fy() ini.
+    // Tidak ada hardcoded X/Y di luar dua fungsi ini.
+    double sx(int i)   => gridOriginX + i * strSp;
+    double fy(int row) => gridOriginY + (row + 0.5) * fretSp;
+
+    // ── 5. Top row: simbol ○ / ✕ ──────────────────────────────────────────
+    // Y-center di antara topPad dan gridOriginY, dengan optical offset kecil
+    // agar simbol tidak terlalu mepet ke nut.
+    // topRowMidY = topPad + topRowH * 0.55 → sedikit ke bawah dari center,
+    // memberi lebih banyak ruang antara simbol dan tepi atas canvas.
+    final double topRowMidY = topPad + topRowH * 0.55;
+
+    for (int i = 0; i < _kStrings; i++) {
+      final int fret = shape.frets[i];
+      if (fret != 0 && fret != -1) continue;
+
+      final String symbol = fret == 0 ? '○' : '✕';
+      final Color  color  = fret == 0 ? Colors.white70 : Colors.redAccent;
+
+      _drawText(
+        canvas, symbol,
+        Offset(sx(i), topRowMidY),
+        TextStyle(
+          color: color,
+          fontSize: _kOpenSymbolSz,
+          fontWeight: FontWeight.w600,
+        ),
+        centerX: true, centerY: true,
+      );
+    }
+
+    // ── 6. Nut ─────────────────────────────────────────────────────────────
+    // Saat open position (fret 1): nut tebal & putih terang.
+    // Saat barre position: nut tipis & redup (hanya penanda tepi grid).
+    final bool isOpenPosition = startFret == 1;
     canvas.drawLine(
-      Offset(leftPad, nutY),
-      Offset(leftPad + usableW, nutY),
+      Offset(gridOriginX, gridOriginY),
+      Offset(gridOriginX + gridW, gridOriginY),
       Paint()
-        ..color = startFret == 1 ? Colors.white : Colors.white38
-        ..strokeWidth = startFret == 1 ? 5.0 : 1.5,
+        ..color       = isOpenPosition ? Colors.white : Colors.white30
+        ..strokeWidth = isOpenPosition ? _kNutThickOpen : _kNutThickBarre
+        ..strokeCap   = StrokeCap.butt,
     );
 
-    // ── Fret lines ───────────────────────────────────────────────────────
-    final fretPaint = Paint()
-      ..color = Colors.white24
-      ..strokeWidth = 1.0;
-    for (int i = 1; i <= _frets; i++) {
-      final dy = nutY + i * fretSp;
+    // ── 7. Fret lines ──────────────────────────────────────────────────────
+    final Paint fretPaint = Paint()
+      ..color       = Colors.white.withOpacity(0.18)
+      ..strokeWidth = 0.8;
+    for (int i = 1; i <= _kFrets; i++) {
+      final double dy = gridOriginY + i * fretSp;
       canvas.drawLine(
-        Offset(leftPad, dy),
-        Offset(leftPad + usableW, dy),
+        Offset(gridOriginX, dy),
+        Offset(gridOriginX + gridW, dy),
         fretPaint,
       );
     }
 
-    // ── String lines ─────────────────────────────────────────────────────
-    for (int i = 0; i < _strings; i++) {
-      final dx = leftPad + i * strSp;
+    // ── 8. String lines ────────────────────────────────────────────────────
+    // Urutan: i=0 = bass/low-E (kiri visual) → tebal.
+    //         i=5 = treble/high-e (kanan visual) → tipis.
+    for (int i = 0; i < _kStrings; i++) {
+      final double stringTop    = gridOriginY;
+      final double stringBottom = gridOriginY + _kFrets * fretSp;
+
       canvas.drawLine(
-        Offset(dx, nutY),
-        Offset(dx, nutY + _frets * fretSp),
+        Offset(sx(i), stringTop),
+        Offset(sx(i), stringBottom),
         Paint()
-          ..color = Colors.white38
-          ..strokeWidth = 1.0 + i * 0.22,
+          ..color       = Colors.white38
+          ..strokeWidth = _stringThickness(i)
+          ..strokeCap   = StrokeCap.butt,
       );
     }
 
-    // ── Base fret label ──────────────────────────────────────────────────
-    if (startFret > 1) {
-      _drawText(
-        canvas,
-        '${startFret}fr',
-        Offset(2, nutY + fretSp * 0.5),
-        TextStyle(
-          color: Colors.white70,
-          fontSize: dotFontSize * 0.9,
-          fontWeight: FontWeight.w600,
-        ),
-        centerY: true,
-      );
-    }
-
-    // ── Barre ────────────────────────────────────────────────────────────
-    if (shape.barreFret != null &&
+    // ── 9. Barre ───────────────────────────────────────────────────────────
+    if (shape.barreFret        != null &&
         shape.barreStartString != null &&
-        shape.barreEndString != null) {
+        shape.barreEndString   != null) {
       final int row = shape.barreFret! - startFret;
-      if (row >= 0 && row < _frets) {
-        final double dy = nutY + (row + 0.5) * fretSp;
-        final double xStart = leftPad + shape.barreStartString! * strSp;
-        final double xEnd = leftPad + shape.barreEndString! * strSp;
-        const Color barreCol = Color(0xFFFF4C4C);
+      if (row >= 0 && row < _kFrets) {
+        final double dy     = fy(row);
+        final double xStart = sx(shape.barreStartString!);
+        final double xEnd   = sx(shape.barreEndString!);
 
+        // Barre height: proporsi fretSp agar tidak overflow ke fret berikutnya.
+        final double barreH = (fretSp * 0.52).clamp(10.0, 22.0);
+        final double barreR = barreH * 0.5;
+
+        const Color col = Color(0xFFFF4C4C);
+
+        // Glow layer
         canvas.drawRRect(
           RRect.fromRectAndRadius(
-            Rect.fromPoints(
-              Offset(xStart - 8, dy - 13),
-              Offset(xEnd + 8, dy + 13),
+            Rect.fromCenter(
+              center: Offset((xStart + xEnd) / 2, dy),
+              width:  (xEnd - xStart) + barreH + 4,
+              height: barreH + 6,
             ),
-            const Radius.circular(12),
+            Radius.circular(barreR + 2),
           ),
           Paint()
-            ..color = barreCol.withOpacity(0.22)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+            ..color      = col.withOpacity(0.20)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
         );
 
+        // Body layer
         canvas.drawRRect(
           RRect.fromRectAndRadius(
-            Rect.fromPoints(
-              Offset(xStart - 7, dy - 11),
-              Offset(xEnd + 7, dy + 11),
+            Rect.fromCenter(
+              center: Offset((xStart + xEnd) / 2, dy),
+              width:  (xEnd - xStart) + barreH,
+              height: barreH,
             ),
-            const Radius.circular(11),
+            Radius.circular(barreR),
           ),
           Paint()
-            ..color = barreCol.withOpacity(0.9)
+            ..color = col.withOpacity(0.92)
             ..style = PaintingStyle.fill,
         );
 
+        // Label "1"
         _drawText(
-          canvas,
-          '1',
+          canvas, '1',
           Offset((xStart + xEnd) / 2, dy),
           const TextStyle(
             color: Colors.black,
-            fontSize: 12,
+            fontSize: _kBarreFontSz,
             fontWeight: FontWeight.bold,
           ),
-          centerX: true,
-          centerY: true,
+          centerX: true, centerY: true,
         );
       }
     }
 
-    // ── Finger dots ──────────────────────────────────────────────────────
-    for (int i = 0; i < _strings; i++) {
+    // ── 10. Finger dots ────────────────────────────────────────────────────
+    for (int i = 0; i < _kStrings; i++) {
       final int absFret = shape.frets[i];
       if (absFret <= 0) continue;
 
       final int row = absFret - startFret;
-      if (row < 0 || row >= _frets) continue;
+      if (row < 0 || row >= _kFrets) continue;
 
-      if (shape.barreFret != null &&
-          absFret == shape.barreFret &&
+      // Skip string yang sudah dicakup barre
+      if (shape.barreFret        != null &&
+          absFret                == shape.barreFret &&
           shape.barreStartString != null &&
-          shape.barreEndString != null &&
+          shape.barreEndString   != null &&
           i >= shape.barreStartString! &&
-          i <= shape.barreEndString!) {
-        continue;
-      }
+          i <= shape.barreEndString!) continue;
 
-      final int finger = shape.fingers[i];
-      final int safeFinger = (absFret > 0 && finger == 0) ? 1 : finger;
-      final Color color = _fingerColor(safeFinger);
-      final double dx = leftPad + i * strSp;
-      final double dy = nutY + (row + 0.5) * fretSp;
+      final int   finger = shape.fingers[i];
+      final int   safeF  = (absFret > 0 && finger == 0) ? 1 : finger;
+      final Color color  = _fingerColor(safeF);
+      final double dx    = sx(i);
+      final double dy    = fy(row);
 
-      // Glow
+      // Glow — radius lebih ketat dari sebelumnya
       canvas.drawCircle(
-        Offset(dx, dy),
-        dotRadius + 3,
+        Offset(dx, dy), glowR,
         Paint()
-          ..color = color.withOpacity(0.25)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+          ..color      = color.withOpacity(0.22)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
       );
 
-      // Dot
-      canvas.drawCircle(Offset(dx, dy), dotRadius, Paint()..color = color);
+      // Body dot
+      canvas.drawCircle(Offset(dx, dy), dotR, Paint()..color = color);
 
-      if (safeFinger > 0) {
+      // Nomor jari
+      if (safeF > 0) {
         _drawText(
-          canvas,
-          '$safeFinger',
-          Offset(dx, dy),
+          canvas, '$safeF', Offset(dx, dy),
           TextStyle(
             color: Colors.black,
-            fontSize: dotFontSize,
+            fontSize: dotFontSz,
             fontWeight: FontWeight.bold,
           ),
-          centerX: true,
-          centerY: true,
+          centerX: true, centerY: true,
         );
       }
     }
+
+    // ── 11. Base fret label ────────────────────────────────────────────────
+    // Hanya digambar saat baseFret > 1 (hasAnnot == true).
+    // Saat hasAnnot, gridOriginX = _kAnnotW + _kAnnotGap + _kDotRMax,
+    // sehingga label yang right-align di _kAnnotW selalu berjarak
+    // minimal _kAnnotGap dari tepi kiri dot string-0. ✓
+    if (hasAnnot) {
+      // Vertikal: rata tengah ke fret row pertama (row 0), sejajar dengan
+      // dot di fret pertama secara optis. Ini lebih intuitif dari
+      // sekadar gridOriginY + 0.5*fretSp.
+      final double labelY = fy(0);
+
+      final tp = TextPainter(
+        text: TextSpan(
+          text: '${startFret}fr',
+          style: const TextStyle(
+            color: Colors.white60,
+            fontSize: _kLabelFontSz,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      // Right-align di dalam _kAnnotW dengan sedikit optical padding
+      final double lx = (_kAnnotW - tp.width).clamp(0.0, double.infinity);
+      final double ly = labelY - tp.height / 2;
+      tp.paint(canvas, Offset(lx, ly));
+    }
   }
 
+  // ── Helper teks ────────────────────────────────────────────────────────────
   void _drawText(
-    Canvas canvas,
-    String text,
-    Offset pos,
-    TextStyle style, {
-    bool centerX = false,
-    bool centerY = false,
+    Canvas canvas, String text, Offset pos, TextStyle style, {
+    bool centerX = false, bool centerY = false,
   }) {
     final tp = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: TextDirection.ltr,
     )..layout();
-    final dx = centerX ? pos.dx - tp.width / 2 : pos.dx;
-    final dy = centerY ? pos.dy - tp.height / 2 : pos.dy;
-    tp.paint(canvas, Offset(dx, dy));
+    tp.paint(canvas, Offset(
+      centerX ? pos.dx - tp.width  / 2 : pos.dx,
+      centerY ? pos.dy - tp.height / 2 : pos.dy,
+    ));
   }
 
   @override
