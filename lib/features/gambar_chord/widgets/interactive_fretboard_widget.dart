@@ -79,7 +79,7 @@ class InteractiveFretboardWidget extends StatelessWidget {
       ),
       child: ClipRect(
         child: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: MainAxisSize.max,
         children: [
           // FIX #12: Baris X / O sekarang tappable untuk toggle mute
           _buildTopRow(),

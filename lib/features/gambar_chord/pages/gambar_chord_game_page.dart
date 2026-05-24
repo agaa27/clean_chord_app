@@ -83,15 +83,6 @@ List<int> _buildUserFrets(
   return result;
 }
 
-/// Perbandingan list integer elemen-per-elemen — tidak ada toleransi.
-bool _listEquals(List<int> a, List<int> b) {
-  if (a.length != b.length) return false;
-  for (int i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) return false;
-  }
-  return true;
-}
-
 /// Bandingkan satu string: apakah nilai user cocok dengan target?
 /// Toleransi khusus:
 ///   target == -1 (mute) → terima jika user -1 (eksplisit mute) ATAU
@@ -657,30 +648,35 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
                 physics: const BouncingScrollPhysics(),
                 itemCount: previews.length,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2, childAspectRatio: 0.85,
+                  crossAxisCount: 2, childAspectRatio: 0.82,
                   crossAxisSpacing: 8, mainAxisSpacing: 8,
                 ),
                 itemBuilder: (_, i) {
                   final c = previews[i];
-                  return ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: _card,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: accent.withValues(alpha: 0.1)),
-                      ),
-                      padding: const EdgeInsets.fromLTRB(4, 10, 4, 8),
-                      child: Column(children: [
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: _card,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: accent.withValues(alpha: 0.1)),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(6, 10, 6, 6),
+                    child: Column(
+                      children: [
                         Text(_fmtChord(c), style: TextStyle(
-                            color: accent, fontSize: 14, fontWeight: FontWeight.bold)),
+                            color: accent, fontSize: 15, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 4),
-                        Expanded(child: ClipRect(child: FittedBox(
-                          fit: BoxFit.contain,
-                          alignment: Alignment.topCenter,
-                          child: ChordFretboardWidget(shape: c.shapes.first, chordName: ''),
-                        ))),
-                      ]),
+                        Expanded(
+                          child: ClipRect(
+                            child: FittedBox(
+                              fit: BoxFit.contain,
+                              child: ChordFretboardWidget(
+                                shape: c.shapes.first,
+                                chordName: '',
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 },
@@ -863,39 +859,52 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
         const SizedBox(height: 8),
 
         // ── Fretboard area ───────────────────────────────────────────────
+        // Gunakan Stack agar AnimatedContainer preview chord overlay fretboard
+        // dari bawah — fretboard TIDAK berubah ukuran saat preview dibuka.
         Expanded(child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: FadeTransition(
             opacity: _fadeAnim,
-            child: Column(children: [
-              Expanded(child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: InteractiveFretboardWidget(
-                    placedDots:   _renderDots,
-                    mutedStrings: _muted,
-                    onTap:        _onTap,
-                    // FIX #12: sambungkan callback mute ke _toggleMute
-                    onToggleMute: _toggleMute,
-                    reviewMode:   _isReviewing,
-                    reviewColors: revColors,
-                    baseFret:     _baseFret,
-                    barres:       _renderBarres,
-                  )),
-                  _buildFretNav(accent),
-                ],
-              )),
-              if (_isReviewing && !_isCorrect && _chord != null)
-                // AnimatedContainer dibatasi ukurannya dengan ConstrainedBox
-                // agar tidak pernah overflow — max height 210 beri margin aman.
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  height: _showAnswerPanel ? 202 : 40,
-                  clipBehavior: Clip.hardEdge,
-                  decoration: const BoxDecoration(),
-                  child: _buildRefPanel(accent),
+            child: Stack(
+              alignment: Alignment.bottomCenter,
+              children: [
+                // Fretboard selalu full-height — tidak terpengaruh refPanel
+                Positioned.fill(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: InteractiveFretboardWidget(
+                        placedDots:   _renderDots,
+                        mutedStrings: _muted,
+                        onTap:        _onTap,
+                        onToggleMute: _toggleMute,
+                        reviewMode:   _isReviewing,
+                        reviewColors: revColors,
+                        baseFret:     _baseFret,
+                        barres:       _renderBarres,
+                      )),
+                      _buildFretNav(accent),
+                    ],
+                  ),
                 ),
-            ]),
+                // RefPanel tumbuh ke atas sebagai overlay — tidak mendorong fretboard
+                if (_isReviewing && !_isCorrect && _chord != null)
+                  Positioned(
+                    left: 0, right: 0, bottom: 0,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      height: _showAnswerPanel ? 210 : 44,
+                      clipBehavior: Clip.hardEdge,
+                      decoration: const BoxDecoration(),
+                      child: OverflowBox(
+                        alignment: Alignment.topCenter,
+                        maxHeight: 210,
+                        child: _buildRefPanel(accent),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         )),
 

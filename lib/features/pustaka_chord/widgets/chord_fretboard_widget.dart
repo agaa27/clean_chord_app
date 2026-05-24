@@ -39,81 +39,102 @@ Color _fingerColor(int finger) => _kFingerColors[finger] ?? Colors.grey;
 class ChordFretboardWidget extends StatelessWidget {
   final ChordShapeModel shape;
   final String chordName;
+  final bool compact;
 
   const ChordFretboardWidget({
-    super.key,
-    required this.shape,
-    this.chordName = '',
-  });
+  super.key,
+  required this.shape,
+  this.chordName = '',
+  this.compact = false,
+});
+
+  // Fixed dimensions untuk compact — tidak bergantung parent constraint sama sekali
+  static const double _kCompactW     = 100.0;
+  static const double _kCompactFretH = 120.0;
+  static const double _kCompactPad   =   8.0;
+  static const double _kCompactR     =  12.0;
 
   @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final double cardWidth =
-            (constraints.maxWidth - 32).clamp(0.0, 300.0);
+  Widget build(BuildContext context) =>
+      compact ? _buildCompact() : _buildFull();
 
-        return Center(
-          child: Container(
-            width: cardWidth,
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-            decoration: BoxDecoration(
-              color: const Color(0xFF111111),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: Colors.cyanAccent.withOpacity(0.3),
-                width: 1,
+  Widget _buildCompact() {
+    return Center(
+      child: Container(
+        width: _kCompactW,
+        padding: EdgeInsets.all(_kCompactPad),
+        decoration: BoxDecoration(
+          color: const Color(0xFF111111),
+          borderRadius: BorderRadius.circular(_kCompactR),
+          border: Border.all(color: Colors.cyanAccent.withOpacity(0.25), width: 1),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (chordName.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(chordName,
+                    style: const TextStyle(
+                      color: Colors.cyanAccent, fontSize: 11,
+                      fontWeight: FontWeight.bold, letterSpacing: 1.5)),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.cyanAccent.withOpacity(0.08),
-                  blurRadius: 30,
-                  spreadRadius: 2,
-                ),
-              ],
+            RepaintBoundary(
+              child: SizedBox(
+                width:  _kCompactW - _kCompactPad * 2,
+                height: _kCompactFretH,
+                child: CustomPaint(painter: _FretboardPainter(shape: shape)),
+              ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // ── Chord name ──────────────────────────────────────────
-                if (chordName.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Text(
-                      chordName,
-                      style: const TextStyle(
-                        color: Colors.cyanAccent,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                  ),
-
-                // ── Fretboard ────────────────────────────────────────────
-                // AspectRatio 4:5 → lebih natural, mirip GuitarTuna/Ultimate Guitar.
-                // Lebih lebar relatif terhadap tingginya vs 3:4 yang terlalu "portrait".
-                RepaintBoundary(
-                  child: AspectRatio(
-                    aspectRatio: 4 / 5,
-                    child: CustomPaint(
-                      size: Size.infinite,
-                      painter: _FretboardPainter(shape: shape),
-                    ),
-                  ),
-                ),
-
-                // ── Finger legend ───────────────────────────────────────
-                const SizedBox(height: 10),
-                _buildFingerLegend(),
-              ],
-            ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 
+  Widget _buildFull() {
+    return LayoutBuilder(builder: (context, constraints) {
+      final double cardWidth = (constraints.maxWidth - 32).clamp(0.0, 300.0);
+      return Center(
+        child: Container(
+          width: cardWidth,
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111111),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.cyanAccent.withOpacity(0.3), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.cyanAccent.withOpacity(0.08),
+                blurRadius: 30, spreadRadius: 2),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (chordName.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(chordName,
+                      style: const TextStyle(
+                        color: Colors.cyanAccent, fontSize: 22,
+                        fontWeight: FontWeight.bold, letterSpacing: 2)),
+                ),
+              RepaintBoundary(
+                child: SizedBox(
+                  height: 260,
+                  width: double.infinity,
+                  child: CustomPaint(painter: _FretboardPainter(shape: shape)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              _buildFingerLegend(),
+            ],
+          ),
+        ),
+      );
+    });
+  }
   // ── Legend jari ──────────────────────────────────────────────────────────
   Widget _buildFingerLegend() {
     final usedFingers = <int>{};
