@@ -88,13 +88,13 @@ class _HomePageState extends State<HomePage>
             color: Colors.black,
             border: Border(
               top: BorderSide(
-                color: activeColor.withOpacity(0.3 + 0.2 * _glowAnim.value),
+                color: activeColor.withValues(alpha: 0.3 + 0.2 * _glowAnim.value),
                 width: 1.5,
               ),
             ),
             boxShadow: [
               BoxShadow(
-                color: activeColor.withOpacity(0.08 + 0.07 * _glowAnim.value),
+                color: activeColor.withValues(alpha: 0.08 + 0.07 * _glowAnim.value),
                 blurRadius: 20,
                 spreadRadius: 2,
                 offset: const Offset(0, -4),
@@ -164,8 +164,8 @@ class _NavBarItem extends StatelessWidget {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: item.color.withOpacity(
-                            0.25 + 0.15 * glowValue,
+                          color: item.color.withValues(
+                            alpha: 0.25 + 0.15 * glowValue,
                           ),
                           blurRadius: 20,
                           spreadRadius: 4,
@@ -181,9 +181,9 @@ class _NavBarItem extends StatelessWidget {
                 decoration: isSelected
                     ? BoxDecoration(
                         shape: BoxShape.circle,
-                        color: item.color.withOpacity(0.12),
+                        color: item.color.withValues(alpha: 0.12),
                         border: Border.all(
-                          color: item.color.withOpacity(0.4),
+                          color: item.color.withValues(alpha: 0.4),
                           width: 1,
                         ),
                       )
@@ -205,7 +205,7 @@ class _NavBarItem extends StatelessWidget {
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               letterSpacing: isSelected ? 0.5 : 0,
               shadows: isSelected
-                  ? [Shadow(color: item.color.withOpacity(0.8), blurRadius: 6)]
+                  ? [Shadow(color: item.color.withValues(alpha: 0.8), blurRadius: 6)]
                   : [],
             ),
             child: Text(item.label),
