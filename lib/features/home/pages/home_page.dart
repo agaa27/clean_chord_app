@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'materi_page.dart';
 import 'progress_page.dart';
-import 'About_page.dart';
+import 'about_page.dart';
 
 
 
@@ -21,10 +21,10 @@ class _HomePageState extends State<HomePage>
   final List<Widget> _pages = const [
     MateriPage(),
     Center(
-      child: const ProgressPage(),
+      child: ProgressPage(),
     ),
     Center(
-      child: const AboutPage(),
+      child: AboutPage(),
     ),
   ];
 
