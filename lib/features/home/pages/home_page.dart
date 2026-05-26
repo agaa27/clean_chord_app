@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'materi_page.dart';
+import 'progress_page.dart';
+import 'About_page.dart';
+
+
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -17,10 +21,10 @@ class _HomePageState extends State<HomePage>
   final List<Widget> _pages = const [
     MateriPage(),
     Center(
-      child: Text("Progress Page", style: TextStyle(color: Colors.white)),
+      child: const ProgressPage(),
     ),
     Center(
-      child: Text("Profil Page", style: TextStyle(color: Colors.white)),
+      child: const AboutPage(),
     ),
   ];
 
@@ -37,7 +41,7 @@ class _HomePageState extends State<HomePage>
     ),
     _NavItem(
       icon: Icons.person_rounded,
-      label: "Profil",
+      label: "About",
       color: Color(0xFF9D00FF),
     ),
   ];

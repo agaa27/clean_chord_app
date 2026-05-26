@@ -215,11 +215,6 @@ class ChordFretboardWidget extends StatelessWidget {
 // GEOMETRY SYSTEM — SINGLE SOURCE OF TRUTH
 // ══════════════════════════════════════════════════════════════════════════════
 //
-//  HORIZONTAL (kiri → kanan):
-//  ┌─────────────────┬──────────────────────────────────┬──────────┐
-//  │   annotZone     │           gridZone               │rightPad  │
-//  │ 0 .. gridOriginX│ gridOriginX .. gridOriginX+gridW │          │
-//  └─────────────────┴──────────────────────────────────┴──────────┘
 //
 //    gridOriginX = _kAnnotW + _kAnnotGap + dotRMax
 //    ──────────────────────────────────────────────
@@ -231,16 +226,7 @@ class ChordFretboardWidget extends StatelessWidget {
 //    = gridOriginX - dotRMax = _kAnnotW + _kAnnotGap
 //    → selalu ada gap _kAnnotGap antara label dan tepi dot. ✓
 //
-//  VERTIKAL (atas → bawah):
-//  ┌──────────────────────────────────────────────────────────────┐
-//  │ topPad                        (breathing room atas)          │
-//  ├──────────────────────────────────────────────────────────────┤
-//  │ topRowH                       (○/✕ zone)                     │
-//  ├──────────────────────────────────────────────────────────────┤ ← gridOriginY (= nut line Y)
-//  │ gridH = fretSp × _kFrets      (fretboard zone)               │
-//  ├──────────────────────────────────────────────────────────────┤
-//  │ bottomPad                     (breathing room bawah)         │
-//  └──────────────────────────────────────────────────────────────┘
+//
 //
 //  HELPERS:
 //    sx(i)   = gridOriginX + i × strSp     → X tengah string ke-i
