@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_application_1/features/kuis_chord/pages/kuis_chord_page.dart';
-import 'package:flutter_application_1/features/metronom/pages/metronom_page.dart';
+import 'package:clean_chord/features/kuis_chord/pages/kuis_chord_page.dart';
+import 'package:clean_chord/features/metronom/pages/metronom_page.dart';
 import '../widgets/menu_card.dart';
-import 'package:flutter_application_1/features/pustaka_chord/pages/pustaka_chord_page.dart';
-import 'package:flutter_application_1/features/gambar_chord/pages/gambar_chord_page.dart';
+import 'package:clean_chord/features/pustaka_chord/pages/pustaka_chord_page.dart';
+import 'package:clean_chord/features/gambar_chord/pages/gambar_chord_page.dart';
 
 class MateriPage extends StatefulWidget {
   const MateriPage({super.key});
