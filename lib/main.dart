@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/theme/app_theme.dart';
+import 'core/progression/progression.dart';
 import 'features/home/pages/home_page.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Init global progression engine sebelum UI jalan
+  await ProgressionService.instance.init();
+
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+
   runApp(const MyApp());
 }
 
@@ -19,7 +25,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Clean Chord',
+      title: 'Fretora',
       theme: AppTheme.darkTheme,
       home: const HomePage(),
     );

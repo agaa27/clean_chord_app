@@ -8,6 +8,7 @@ import '../../pustaka_chord/widgets/chord_fretboard_widget.dart';
 import '../models/quiz_level_model.dart';
 import '../../../core/services/quiz_audio_service.dart';
 import '../widgets/kuis_progress_bar.dart';
+import '../../../core/progression/progression.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper — konversi ChordModel → nama tampil
@@ -285,15 +286,28 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
   }
 
   // ── Dialogs ───────────────────────────────────────────────────────────────
-  void _showWinDialog() {
+  void _showWinDialog() async {
     if (!mounted || _dialogShowing) return;
     _dialogShowing = true;
+ 
+    // ── Simpan progression ─────────────────────────────────────
+    final result = await ProgressionService.instance.completeLevel(
+      ProgressionConfig.featureQuiz,
+      widget.level.id,
+    );
+    // ──────────────────────────────────────────────────────────
+ 
+    if (!mounted) return;
+ 
     _showResultDialog(
       icon: '🎸',
       title: 'Luar Biasa!',
       titleColor: _correct,
       message: 'Level ${widget.level.id} selesai!\nSkor: $_points / ${widget.level.targetPoints}',
       actions: [
+        // Kalau ada level baru terbuka → tampilkan banner unlock
+        if (result.hasNewUnlock)
+          _unlockBanner(result),
         _dialogAction('Selesai', _accentColor, () {
           Navigator.of(context, rootNavigator: false).pop();
           _exitGame();
@@ -320,6 +334,39 @@ class _KuisChordGamePageState extends State<KuisChordGamePage>
           _exitGame();
         }),
       ],
+    );
+  }
+
+  Widget _unlockBanner(CompletionResult result) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFBD00FF).withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFBD00FF).withValues(alpha: 0.35),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_open_rounded, color: Color(0xFFBD00FF), size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '+${result.xpGained} XP  •  '
+              '${result.difficultyUnlocked} Level ${result.unlockedNextLevel} terbuka!',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                fontFamily: 'Orbitron',
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

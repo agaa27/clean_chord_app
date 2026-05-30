@@ -7,6 +7,7 @@ import '../../pustaka_chord/models/chord_model.dart';
 import '../../pustaka_chord/widgets/chord_fretboard_widget.dart';
 import '../models/gambar_level_model.dart';
 import '../services/quiz_audio_service.dart';
+import '../../../core/progression/progression.dart';
 import '../widgets/interactive_fretboard_widget.dart';
 import '../../../core/chord/models/finger_position.dart';
 import '../../../core/chord/models/barre_info.dart';
@@ -443,19 +444,57 @@ class _GambarChordGamePageState extends State<GambarChordGamePage>
   }
 
   // ── Dialogs ───────────────────────────────────────────────────────────────
-  void _showWinDialog() {
+  // INTEGRASI PROGRESSION
+  void _showWinDialog() async {
     if (!mounted || _dialogShown) return;
     _dialogShown = true;
     _timer?.cancel();
+
+    // Simpan ke engine
+    final result = await ProgressionService.instance.completeLevel(
+      ProgressionConfig.featureGambar,
+      widget.level.id,
+    );
+
+    if (!mounted) return;
+
     _showResultDialog(
       icon: '🎸', title: 'Selesai!', titleColor: _green,
       message: 'Kamu menjawab benar $_score dari ${widget.level.targetPoints} soal.',
       actions: [
+        if (result.hasNewUnlock) _unlockBanner(result),
         _dialogBtn('Selesai', _accent, () {
           Navigator.of(context, rootNavigator: false).pop();
           _exit();
         }),
       ],
+    );
+  }
+
+  Widget _unlockBanner(CompletionResult result) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: _purple.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _purple.withValues(alpha: 0.35), width: 1),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_open_rounded, color: _purple, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '+${result.xpGained} XP  •  ${result.difficultyUnlocked} Level ${result.unlockedNextLevel} terbuka!',
+              style: const TextStyle(
+                color: Colors.white70, fontSize: 12,
+                fontFamily: 'Orbitron', letterSpacing: 0.3,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

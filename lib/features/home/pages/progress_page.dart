@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../../core/progression/progression.dart';
 
 class ProgressPage extends StatefulWidget {
   const ProgressPage({super.key});
@@ -12,73 +13,44 @@ class _ProgressPageState extends State<ProgressPage>
     with TickerProviderStateMixin {
   late AnimationController _pulseController;
   late AnimationController _fadeController;
-  late Animation<double> _pulseAnim;
+  late Animation<double>   _pulseAnim;
   late List<Animation<double>> _fadeAnims;
 
-  // ── Dummy Data ──────────────────────────────────────────────
   static const String _username = 'Rangga_Coustic';
-  static const String _level = 'Pemula';
-  static const int _xp = 340;
-  static const int _maxXp = 500;
-  static const double _overallProgress = 0.38;
+  static const int    _xpPerLevel = 500; // XP tiap "tier" di bar
 
+  // Stats tetap dummy — nanti bisa di-connect ke engine
   static const List<_StatData> _stats = [
-    _StatData(Icons.library_music_rounded, 'Chord\nDipelajari', '24',
-        Color(0xFF00FFFF)),
-    _StatData(Icons.quiz_rounded, 'Kuis\nSelesai', '8', Color(0xFFFF00FF)),
-    _StatData(
-        Icons.gps_fixed_rounded, 'Akurasi\nKuis', '82%', Color(0xFF9D00FF)),
-    _StatData(Icons.local_fire_department_rounded, 'Streak\nBelajar', '5 hari',
-        Color(0xFFFFAA00)),
-    _StatData(Icons.draw_rounded, 'Progress\nGambar', '12/30', Color(0xFF00FF88)),
-    _StatData(
-        Icons.stars_rounded, 'Total XP', '340 XP', Color(0xFFFF4488)),
+    _StatData(Icons.library_music_rounded, 'Chord\nDipelajari', '24', Color(0xFF00FFFF)),
+    _StatData(Icons.quiz_rounded,          'Kuis\nSelesai',     '8',  Color(0xFFFF00FF)),
+    _StatData(Icons.gps_fixed_rounded,     'Akurasi\nKuis',    '82%', Color(0xFF9D00FF)),
+    _StatData(Icons.local_fire_department_rounded, 'Streak\nBelajar', '5 hari', Color(0xFFFFAA00)),
+    _StatData(Icons.draw_rounded,          'Progress\nGambar', '12/30', Color(0xFF00FF88)),
+    _StatData(Icons.stars_rounded,         'Total XP',          '-',  Color(0xFFFF4488)),
   ];
 
-  static const List<_LevelData> _levels = [
-    _LevelData('Pemula', Icons.emoji_events_rounded, Color(0xFF00FFFF), true,
-        'Chord dasar, kunci mayor & minor'),
-    _LevelData('Menengah', Icons.lock_rounded, Color(0xFFFF00FF), false,
-        'Chord 7th, barre chord, transisi'),
-    _LevelData('Mahir', Icons.lock_rounded, Color(0xFF9D00FF), false,
-        'Chord jazz, fingerstyle, improvisasi'),
+  static const List<_DiffData> _diffs = [
+    _DiffData('Pemula',   Color(0xFF00FFFF), 'Chord dasar, kunci mayor & minor',  1,  5),
+    _DiffData('Menengah', Color(0xFFFF00FF), 'Chord 7th, barre chord, transisi',  6, 13),
+    _DiffData('Mahir',    Color(0xFF9D00FF), 'Chord jazz, fingerstyle, improvisasi', 14, 20),
   ];
-
-  static const List<_ActivityData> _activities = [
-    _ActivityData(Icons.check_circle_rounded, 'Menyelesaikan kuis chord dasar',
-        '2 jam lalu', Color(0xFF00FFFF)),
-    _ActivityData(Icons.draw_rounded, 'Berhasil menggambar chord Em',
-        '5 jam lalu', Color(0xFF00FF88)),
-    _ActivityData(Icons.trending_up_rounded, 'Akurasi meningkat menjadi 82%',
-        'Kemarin', Color(0xFFFF4488)),
-    _ActivityData(Icons.menu_book_rounded, 'Membuka materi chord mayor',
-        '2 hari lalu', Color(0xFF9D00FF)),
-    _ActivityData(Icons.local_fire_department_rounded,
-        'Streak 5 hari berturut-turut', '3 hari lalu', Color(0xFFFFAA00)),
-  ];
-  // ────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
 
     _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2000),
+      vsync: this, duration: const Duration(milliseconds: 2000),
     )..repeat(reverse: true);
-    _pulseAnim =
-        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut);
+    _pulseAnim = CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut);
 
     _fadeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
+      vsync: this, duration: const Duration(milliseconds: 900),
     )..forward();
-    _fadeAnims = List.generate(5, (i) {
-      return CurvedAnimation(
-        parent: _fadeController,
-        curve: Interval(i * 0.12, 0.6 + i * 0.08, curve: Curves.easeOutBack),
-      );
-    });
+    _fadeAnims = List.generate(5, (i) => CurvedAnimation(
+      parent: _fadeController,
+      curve: Interval(i * 0.12, 0.6 + i * 0.08, curve: Curves.easeOutBack),
+    ));
   }
 
   @override
@@ -88,6 +60,35 @@ class _ProgressPageState extends State<ProgressPage>
     super.dispose();
   }
 
+  // ── Helpers ─────────────────────────────────────────────────
+  IconData _iconForFeature(String key) {
+    switch (key) {
+      case ProgressionConfig.featureQuiz:   return Icons.quiz_rounded;
+      case ProgressionConfig.featureGambar: return Icons.draw_rounded;
+      case ProgressionConfig.featureEar:    return Icons.hearing_rounded;
+      default: return Icons.star_rounded;
+    }
+  }
+
+  Color _colorForFeature(String key) {
+    switch (key) {
+      case ProgressionConfig.featureQuiz:   return const Color(0xFF00FFFF);
+      case ProgressionConfig.featureGambar: return const Color(0xFF00FF88);
+      case ProgressionConfig.featureEar:    return const Color(0xFF9D00FF);
+      default: return const Color(0xFFFFAA00);
+    }
+  }
+
+  String _formatTime(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1)  return 'Baru saja';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} menit lalu';
+    if (diff.inHours < 24)   return '${diff.inHours} jam lalu';
+    if (diff.inDays == 1)    return 'Kemarin';
+    return '${diff.inDays} hari lalu';
+  }
+
+  // ── BUILD ───────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -98,36 +99,27 @@ class _ProgressPageState extends State<ProgressPage>
           slivers: [
             SliverToBoxAdapter(child: _buildHeader()),
             SliverToBoxAdapter(
-              child: _buildSectionLabel('STATISTIK BELAJAR',
-                  const Color(0xFF00FFFF), _fadeAnims[1]),
+              child: _buildSectionLabel('STATISTIK BELAJAR', const Color(0xFF00FFFF), _fadeAnims[1]),
             ),
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: SliverToBoxAdapter(
-                child: _buildStatsGrid(_fadeAnims[1]),
-              ),
+              sliver: SliverToBoxAdapter(child: _buildStatsGrid(_fadeAnims[1])),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 8)),
             SliverToBoxAdapter(
-              child: _buildSectionLabel('LEVEL PROGRESSION',
-                  const Color(0xFFFF00FF), _fadeAnims[2]),
+              child: _buildSectionLabel('LEVEL PROGRESSION', const Color(0xFFFF00FF), _fadeAnims[2]),
             ),
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: SliverToBoxAdapter(
-                child: _buildLevels(_fadeAnims[2]),
-              ),
+              sliver: SliverToBoxAdapter(child: _buildLevels(_fadeAnims[2])),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 8)),
             SliverToBoxAdapter(
-              child: _buildSectionLabel('AKTIVITAS TERAKHIR',
-                  const Color(0xFF9D00FF), _fadeAnims[3]),
+              child: _buildSectionLabel('AKTIVITAS TERAKHIR', const Color(0xFF9D00FF), _fadeAnims[3]),
             ),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-              sliver: SliverToBoxAdapter(
-                child: _buildActivities(_fadeAnims[3]),
-              ),
+              sliver: SliverToBoxAdapter(child: _buildActivities(_fadeAnims[3])),
             ),
           ],
         ),
@@ -135,49 +127,55 @@ class _ProgressPageState extends State<ProgressPage>
     );
   }
 
-  // ── HEADER ──────────────────────────────────────────────────
+  // ── HEADER — live dari engine ───────────────────────────────
   Widget _buildHeader() {
-    return AnimatedBuilder(
-      animation: Listenable.merge([_pulseAnim, _fadeAnims[0]]),
+    return ListenableBuilder(
+      listenable: ProgressionService.instance,
       builder: (context, _) {
-        return FadeTransition(
-          opacity: _fadeAnims[0],
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, -0.15),
-              end: Offset.zero,
-            ).animate(_fadeAnims[0]),
-            child: Container(
-              margin: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0D0D0D),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: const Color(0xFF00FFFF)
-                      .withOpacity(0.3 + 0.2 * _pulseAnim.value),
-                  width: 1.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF00FFFF)
-                        .withOpacity(0.08 + 0.06 * _pulseAnim.value),
-                    blurRadius: 24,
-                    spreadRadius: 2,
+        final p           = ProgressionService.instance.progress;
+        final xp          = p.totalXp;
+        final xpInTier    = xp % _xpPerLevel;
+        final xpFraction  = xpInTier / _xpPerLevel;
+        final levelLabel  = ProgressionConfig.difficultyOf(p.unlockedUpToLevel);
+        final overallPct  = (p.unlockedUpToLevel / ProgressionConfig.totalLevels * 100).toInt();
+
+        return AnimatedBuilder(
+          animation: Listenable.merge([_pulseAnim, _fadeAnims[0]]),
+          builder: (context, _) {
+            return FadeTransition(
+              opacity: _fadeAnims[0],
+              child: SlideTransition(
+                position: Tween<Offset>(begin: const Offset(0, -0.15), end: Offset.zero)
+                    .animate(_fadeAnims[0]),
+                child: Container(
+                  margin: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0D0D0D),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: const Color(0xFF00FFFF).withOpacity(0.3 + 0.2 * _pulseAnim.value),
+                      width: 1.5,
+                    ),
+                    boxShadow: [BoxShadow(
+                      color: const Color(0xFF00FFFF).withOpacity(0.08 + 0.06 * _pulseAnim.value),
+                      blurRadius: 24, spreadRadius: 2,
+                    )],
                   ),
-                ],
+                  child: Row(
+                    children: [
+                      _buildAvatar(),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildProfileInfo(
+                        xp: xp, maxXp: _xpPerLevel, xpFraction: xpFraction,
+                        levelLabel: levelLabel, overallPct: overallPct,
+                      )),
+                    ],
+                  ),
+                ),
               ),
-              child: Row(
-                children: [
-                  // Avatar
-                  _buildAvatar(),
-                  const SizedBox(width: 16),
-                  // Info
-                  Expanded(child: _buildProfileInfo()),
-                ],
-              ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -186,80 +184,59 @@ class _ProgressPageState extends State<ProgressPage>
   Widget _buildAvatar() {
     return AnimatedBuilder(
       animation: _pulseAnim,
-      builder: (context, _) {
-        return Container(
-          width: 72,
-          height: 72,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [Color(0xFF001A1A), Color(0xFF003333)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            border: Border.all(
-              color: const Color(0xFF00FFFF)
-                  .withOpacity(0.5 + 0.3 * _pulseAnim.value),
-              width: 2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF00FFFF)
-                    .withOpacity(0.2 + 0.15 * _pulseAnim.value),
-                blurRadius: 16,
-                spreadRadius: 2,
-              ),
-            ],
+      builder: (context, _) => Container(
+        width: 72, height: 72,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            colors: [Color(0xFF001A1A), Color(0xFF003333)],
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
           ),
-          child: const Icon(Icons.person_rounded,
-              color: Color(0xFF00FFFF), size: 36),
-        );
-      },
+          border: Border.all(
+            color: const Color(0xFF00FFFF).withOpacity(0.5 + 0.3 * _pulseAnim.value),
+            width: 2,
+          ),
+          boxShadow: [BoxShadow(
+            color: const Color(0xFF00FFFF).withOpacity(0.2 + 0.15 * _pulseAnim.value),
+            blurRadius: 16, spreadRadius: 2,
+          )],
+        ),
+        child: const Icon(Icons.person_rounded, color: Color(0xFF00FFFF), size: 36),
+      ),
     );
   }
 
-  Widget _buildProfileInfo() {
-    final xpPercent = _xp / _maxXp;
+  Widget _buildProfileInfo({
+    required int xp,
+    required int maxXp,
+    required double xpFraction,
+    required String levelLabel,
+    required int overallPct,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Username
-        Text(
-          _username,
-          style: const TextStyle(
-            fontFamily: 'Orbitron',
-            color: Colors.white,
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1,
-          ),
-        ),
+        Text(_username, style: const TextStyle(
+          fontFamily: 'Orbitron', color: Colors.white,
+          fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1,
+        )),
         const SizedBox(height: 6),
-        // Badge level
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
           decoration: BoxDecoration(
             color: const Color(0xFF00FFFF).withOpacity(0.1),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-                color: const Color(0xFF00FFFF).withOpacity(0.4), width: 1),
+            border: Border.all(color: const Color(0xFF00FFFF).withOpacity(0.4), width: 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.emoji_events_rounded,
-                  color: Color(0xFF00FFFF), size: 12),
+              const Icon(Icons.emoji_events_rounded, color: Color(0xFF00FFFF), size: 12),
               const SizedBox(width: 4),
-              const Text(
-                _level,
-                style: TextStyle(
-                  fontFamily: 'Orbitron',
-                  color: Color(0xFF00FFFF),
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ),
+              Text(levelLabel, style: const TextStyle(
+                fontFamily: 'Orbitron', color: Color(0xFF00FFFF),
+                fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5,
+              )),
             ],
           ),
         ),
@@ -267,82 +244,54 @@ class _ProgressPageState extends State<ProgressPage>
         // XP bar
         Row(
           children: [
-            const Text(
-              'XP',
-              style: TextStyle(
-                fontFamily: 'Orbitron',
-                color: Colors.grey,
-                fontSize: 10,
-                letterSpacing: 1,
-              ),
-            ),
+            const Text('XP', style: TextStyle(
+              fontFamily: 'Orbitron', color: Colors.grey, fontSize: 10, letterSpacing: 1,
+            )),
             const SizedBox(width: 8),
             Expanded(
               child: AnimatedBuilder(
                 animation: _pulseAnim,
-                builder: (context, _) {
-                  return Stack(
-                    children: [
-                      Container(
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.06),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
+                builder: (context, _) => Stack(children: [
+                  Container(
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  FractionallySizedBox(
+                    widthFactor: xpFraction.clamp(0.0, 1.0),
+                    child: Container(
+                      height: 6,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(colors: [Color(0xFF00FFFF), Color(0xFF0088FF)]),
+                        borderRadius: BorderRadius.circular(3),
+                        boxShadow: [BoxShadow(
+                          color: const Color(0xFF00FFFF).withOpacity(0.5 + 0.3 * _pulseAnim.value),
+                          blurRadius: 6,
+                        )],
                       ),
-                      FractionallySizedBox(
-                        widthFactor: xpPercent,
-                        child: Container(
-                          height: 6,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF00FFFF), Color(0xFF0088FF)],
-                            ),
-                            borderRadius: BorderRadius.circular(3),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF00FFFF).withOpacity(
-                                    0.5 + 0.3 * _pulseAnim.value),
-                                blurRadius: 6,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
+                    ),
+                  ),
+                ]),
               ),
             ),
             const SizedBox(width: 8),
-            Text(
-              '$_xp/$_maxXp',
-              style: const TextStyle(
-                fontFamily: 'Orbitron',
-                color: Color(0xFF00FFFF),
-                fontSize: 10,
-              ),
-            ),
+            Text('$xp XP', style: const TextStyle(
+              fontFamily: 'Orbitron', color: Color(0xFF00FFFF), fontSize: 10,
+            )),
           ],
         ),
         const SizedBox(height: 6),
-        // Overall progress
-        Text(
-          'Progress: ${(_overallProgress * 100).toInt()}%',
-          style: const TextStyle(
-            fontFamily: 'Orbitron',
-            color: Colors.white38,
-            fontSize: 10,
-            letterSpacing: 0.5,
-          ),
-        ),
+        Text('Progress: $overallPct%', style: const TextStyle(
+          fontFamily: 'Orbitron', color: Colors.white38, fontSize: 10, letterSpacing: 0.5,
+        )),
       ],
     );
   }
 
   // ── SECTION LABEL ───────────────────────────────────────────
-  Widget _buildSectionLabel(
-      String title, Color color, Animation<double> anim) {
+  Widget _buildSectionLabel(String title, Color color, Animation<double> anim) {
     return FadeTransition(
       opacity: anim,
       child: Padding(
@@ -350,406 +299,351 @@ class _ProgressPageState extends State<ProgressPage>
         child: Row(
           children: [
             Container(
-              width: 3,
-              height: 16,
+              width: 3, height: 16,
               decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(2),
-                boxShadow: [
-                  BoxShadow(color: color.withOpacity(0.7), blurRadius: 6),
-                ],
+                color: color, borderRadius: BorderRadius.circular(2),
+                boxShadow: [BoxShadow(color: color.withOpacity(0.7), blurRadius: 6)],
               ),
             ),
             const SizedBox(width: 10),
-            Text(
-              title,
-              style: TextStyle(
-                fontFamily: 'Orbitron',
-                color: color,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2,
-                shadows: [Shadow(color: color.withOpacity(0.6), blurRadius: 8)],
-              ),
-            ),
+            Text(title, style: TextStyle(
+              fontFamily: 'Orbitron', color: color,
+              fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 2,
+              shadows: [Shadow(color: color.withOpacity(0.6), blurRadius: 8)],
+            )),
           ],
         ),
       ),
     );
   }
 
-  // ── STATS GRID ───────────────────────────────────────────────
+  // ── STATS GRID — XP card live, sisanya dummy ─────────────────
   Widget _buildStatsGrid(Animation<double> anim) {
-    return FadeTransition(
-      opacity: anim,
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 0.92,
-        ),
-        itemCount: _stats.length,
-        itemBuilder: (context, i) => _StatCard(
-          data: _stats[i],
-          pulseAnim: _pulseAnim,
-        ),
-      ),
+    return ListenableBuilder(
+      listenable: ProgressionService.instance,
+      builder: (context, _) {
+        final liveXp = ProgressionService.instance.totalXp;
+        final liveStats = [
+          ..._stats.sublist(0, 5),
+          _StatData(Icons.stars_rounded, 'Total XP', '$liveXp XP', const Color(0xFFFF4488)),
+        ];
+        return FadeTransition(
+          opacity: anim,
+          child: GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3, mainAxisSpacing: 10,
+              crossAxisSpacing: 10, childAspectRatio: 0.92,
+            ),
+            itemCount: liveStats.length,
+            itemBuilder: (context, i) => _StatCard(data: liveStats[i], pulseAnim: _pulseAnim),
+          ),
+        );
+      },
     );
   }
 
-  // ── LEVELS ──────────────────────────────────────────────────
+  // ── LEVELS — live dari engine ────────────────────────────────
   Widget _buildLevels(Animation<double> anim) {
-    return FadeTransition(
-      opacity: anim,
-      child: Column(
-        children: _levels
-            .map((lvl) => _LevelCard(data: lvl, pulseAnim: _pulseAnim))
-            .toList(),
-      ),
+    return ListenableBuilder(
+      listenable: ProgressionService.instance,
+      builder: (context, _) {
+        final unlocked = ProgressionService.instance.unlockedUpToLevel;
+        return FadeTransition(
+          opacity: anim,
+          child: Column(
+            children: _diffs.map((d) {
+              // Difficulty terbuka kalau unlockedUpToLevel >= startLevel-nya
+              final isUnlocked = unlocked >= d.startLevel;
+              return _DiffCard(data: d, unlocked: isUnlocked, pulseAnim: _pulseAnim);
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 
-  // ── ACTIVITIES ──────────────────────────────────────────────
+  // ── ACTIVITIES — live dari engine ────────────────────────────
   Widget _buildActivities(Animation<double> anim) {
-    return FadeTransition(
-      opacity: anim,
-      child: Column(
-        children: List.generate(_activities.length, (i) {
-          final act = _activities[i];
-          final isLast = i == _activities.length - 1;
-          return IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Timeline
-                SizedBox(
-                  width: 36,
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: act.color.withOpacity(0.12),
-                          border: Border.all(
-                              color: act.color.withOpacity(0.5), width: 1.5),
-                          boxShadow: [
-                            BoxShadow(
-                                color: act.color.withOpacity(0.2),
-                                blurRadius: 8),
-                          ],
-                        ),
-                        child: Icon(act.icon, color: act.color, size: 15),
+    return ListenableBuilder(
+      listenable: ProgressionService.instance,
+      builder: (context, _) {
+        final activities = ProgressionService.instance.progress.recentActivities;
+
+        if (activities.isEmpty) {
+          return FadeTransition(
+            opacity: anim,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.inbox_rounded, color: Colors.white12, size: 40),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Belum ada aktivitas.\nMulai belajar sekarang!',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Orbitron', color: Colors.white24,
+                        fontSize: 12, height: 1.6,
                       ),
-                      if (!isLast)
-                        Expanded(
-                          child: Container(
-                            width: 1.5,
-                            color: act.color.withOpacity(0.2),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Card
-                Expanded(
-                  child: Container(
-                    margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0D0D0D),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                          color: act.color.withOpacity(0.2), width: 1),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          act.title,
-                          style: const TextStyle(
-                            fontFamily: 'Orbitron',
-                            color: Colors.white,
-                            fontSize: 11.5,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          act.time,
-                          style: TextStyle(
-                            fontFamily: 'Orbitron',
-                            color: act.color.withOpacity(0.7),
-                            fontSize: 9.5,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           );
-        }),
-      ),
+        }
+
+        return FadeTransition(
+          opacity: anim,
+          child: Column(
+            children: List.generate(activities.length, (i) {
+              final act    = activities[i];
+              final isLast = i == activities.length - 1;
+              final color  = _colorForFeature(act.featureKey);
+              final icon   = _iconForFeature(act.featureKey);
+              final time   = _formatTime(act.timestamp);
+
+              return IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Timeline
+                    SizedBox(
+                      width: 36,
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 32, height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: color.withOpacity(0.12),
+                              border: Border.all(color: color.withOpacity(0.5), width: 1.5),
+                              boxShadow: [BoxShadow(color: color.withOpacity(0.2), blurRadius: 8)],
+                            ),
+                            child: Icon(icon, color: color, size: 15),
+                          ),
+                          if (!isLast)
+                            Expanded(child: Container(width: 1.5, color: color.withOpacity(0.2))),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Card
+                    Expanded(
+                      child: Container(
+                        margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0D0D0D),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: color.withOpacity(0.2), width: 1),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(act.message, style: const TextStyle(
+                              fontFamily: 'Orbitron', color: Colors.white,
+                              fontSize: 11.5, letterSpacing: 0.3,
+                            )),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(time, style: TextStyle(
+                                  fontFamily: 'Orbitron', color: color.withOpacity(0.7),
+                                  fontSize: 9.5, letterSpacing: 0.5,
+                                )),
+                                if (act.xpEarned > 0)
+                                  Text('+${act.xpEarned} XP', style: TextStyle(
+                                    fontFamily: 'Orbitron', color: color.withOpacity(0.8),
+                                    fontSize: 9.5, fontWeight: FontWeight.bold,
+                                  )),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ),
+        );
+      },
     );
   }
 }
 
-// ── STAT CARD WIDGET ────────────────────────────────────────
+// ── _StatCard ────────────────────────────────────────────────
 class _StatCard extends StatelessWidget {
   final _StatData data;
   final Animation<double> pulseAnim;
-
   const _StatCard({required this.data, required this.pulseAnim});
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: pulseAnim,
-      builder: (context, _) {
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0D0D0D),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: data.color.withOpacity(0.25 + 0.15 * pulseAnim.value),
-              width: 1.2,
+      builder: (context, _) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D0D0D),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: data.color.withOpacity(0.25 + 0.15 * pulseAnim.value),
+            width: 1.2,
+          ),
+          boxShadow: [BoxShadow(
+            color: data.color.withOpacity(0.05 + 0.04 * pulseAnim.value),
+            blurRadius: 12, spreadRadius: 1,
+          )],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: data.color.withOpacity(0.12),
+                boxShadow: [BoxShadow(color: data.color.withOpacity(0.2), blurRadius: 8)],
+              ),
+              child: Icon(data.icon, color: data.color, size: 18),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: data.color
-                    .withOpacity(0.05 + 0.04 * pulseAnim.value),
-                blurRadius: 12,
-                spreadRadius: 1,
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: data.color.withOpacity(0.12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: data.color.withOpacity(0.2),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
-                child: Icon(data.icon, color: data.color, size: 18),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                data.value,
-                style: TextStyle(
-                  fontFamily: 'Orbitron',
-                  color: data.color,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  shadows: [
-                    Shadow(color: data.color.withOpacity(0.6), blurRadius: 6),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                data.label,
-                textAlign: TextAlign.center,
+            const SizedBox(height: 8),
+            Text(data.value, style: TextStyle(
+              fontFamily: 'Orbitron', color: data.color,
+              fontSize: 14, fontWeight: FontWeight.bold,
+              shadows: [Shadow(color: data.color.withOpacity(0.6), blurRadius: 6)],
+            )),
+            const SizedBox(height: 4),
+            Text(data.label, textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontFamily: 'Orbitron',
-                  color: Colors.white38,
-                  fontSize: 8.5,
-                  letterSpacing: 0.3,
-                  height: 1.4,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+                  fontFamily: 'Orbitron', color: Colors.white38,
+                  fontSize: 8.5, letterSpacing: 0.3, height: 1.4,
+                )),
+          ],
+        ),
+      ),
     );
   }
 }
 
-// ── LEVEL CARD WIDGET ───────────────────────────────────────
-class _LevelCard extends StatelessWidget {
-  final _LevelData data;
+// ── _DiffCard (level progression) — live lock/unlock ────────
+class _DiffCard extends StatelessWidget {
+  final _DiffData data;
+  final bool unlocked;
   final Animation<double> pulseAnim;
-
-  const _LevelCard({required this.data, required this.pulseAnim});
+  const _DiffCard({required this.data, required this.unlocked, required this.pulseAnim});
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: pulseAnim,
-      builder: (context, _) {
-        return Opacity(
-          opacity: data.unlocked ? 1.0 : 0.4,
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0D0D0D),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: data.unlocked
-                    ? data.color.withOpacity(0.4 + 0.2 * pulseAnim.value)
-                    : Colors.white12,
-                width: 1.5,
-              ),
-              boxShadow: data.unlocked
-                  ? [
-                      BoxShadow(
-                        color: data.color
-                            .withOpacity(0.08 + 0.06 * pulseAnim.value),
-                        blurRadius: 16,
-                        spreadRadius: 1,
-                      ),
-                    ]
-                  : [],
+      builder: (context, _) => Opacity(
+        opacity: unlocked ? 1.0 : 0.4,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0D0D0D),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: unlocked
+                  ? data.color.withOpacity(0.4 + 0.2 * pulseAnim.value)
+                  : Colors.white12,
+              width: 1.5,
             ),
-            child: Row(
-              children: [
-                // Icon circle
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: data.color.withOpacity(data.unlocked ? 0.15 : 0.05),
-                    border: Border.all(
-                      color: data.unlocked
-                          ? data.color.withOpacity(0.5)
-                          : Colors.white12,
-                      width: 1.5,
-                    ),
-                    boxShadow: data.unlocked
-                        ? [
-                            BoxShadow(
-                              color: data.color.withOpacity(0.25),
-                              blurRadius: 12,
-                            ),
-                          ]
-                        : [],
-                  ),
-                  child: Icon(data.icon,
-                      color: data.unlocked ? data.color : Colors.white24,
-                      size: 22),
-                ),
-                const SizedBox(width: 14),
-                // Text
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            data.name,
-                            style: TextStyle(
-                              fontFamily: 'Orbitron',
-                              color: data.unlocked
-                                  ? Colors.white
-                                  : Colors.white38,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          if (data.unlocked)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 7, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: data.color.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                    color: data.color.withOpacity(0.4),
-                                    width: 1),
-                              ),
-                              child: Text(
-                                'AKTIF',
-                                style: TextStyle(
-                                  fontFamily: 'Orbitron',
-                                  color: data.color,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        data.subtitle,
-                        style: const TextStyle(
-                          fontFamily: 'Orbitron',
-                          color: Colors.white38,
-                          fontSize: 9.5,
-                          letterSpacing: 0.2,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Lock / check
-                Icon(
-                  data.unlocked
-                      ? Icons.check_circle_rounded
-                      : Icons.lock_rounded,
-                  color: data.unlocked ? data.color : Colors.white12,
-                  size: 20,
-                ),
-              ],
-            ),
+            boxShadow: unlocked
+                ? [BoxShadow(color: data.color.withOpacity(0.08 + 0.06 * pulseAnim.value),
+                    blurRadius: 16, spreadRadius: 1)]
+                : [],
           ),
-        );
-      },
+          child: Row(
+            children: [
+              Container(
+                width: 48, height: 48,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: data.color.withOpacity(unlocked ? 0.15 : 0.05),
+                  border: Border.all(
+                    color: unlocked ? data.color.withOpacity(0.5) : Colors.white12,
+                    width: 1.5,
+                  ),
+                  boxShadow: unlocked
+                      ? [BoxShadow(color: data.color.withOpacity(0.25), blurRadius: 12)]
+                      : [],
+                ),
+                child: Icon(
+                  unlocked ? Icons.emoji_events_rounded : Icons.lock_rounded,
+                  color: unlocked ? data.color : Colors.white24,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(data.name, style: TextStyle(
+                          fontFamily: 'Orbitron',
+                          color: unlocked ? Colors.white : Colors.white38,
+                          fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5,
+                        )),
+                        const SizedBox(width: 8),
+                        if (unlocked)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: data.color.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: data.color.withOpacity(0.4), width: 1),
+                            ),
+                            child: Text('AKTIF', style: TextStyle(
+                              fontFamily: 'Orbitron', color: data.color,
+                              fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1,
+                            )),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(data.subtitle, style: const TextStyle(
+                      fontFamily: 'Orbitron', color: Colors.white38,
+                      fontSize: 9.5, letterSpacing: 0.2, height: 1.4,
+                    )),
+                  ],
+                ),
+              ),
+              Icon(
+                unlocked ? Icons.check_circle_rounded : Icons.lock_rounded,
+                color: unlocked ? data.color : Colors.white12,
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
 
-// ── DATA CLASSES ────────────────────────────────────────────
+// ── Data classes ─────────────────────────────────────────────
 class _StatData {
   final IconData icon;
-  final String label;
-  final String value;
+  final String label, value;
   final Color color;
-
   const _StatData(this.icon, this.label, this.value, this.color);
 }
 
-class _LevelData {
-  final String name;
-  final IconData icon;
+class _DiffData {
+  final String name, subtitle;
   final Color color;
-  final bool unlocked;
-  final String subtitle;
-
-  const _LevelData(this.name, this.icon, this.color, this.unlocked,
-      this.subtitle);
-}
-
-class _ActivityData {
-  final IconData icon;
-  final String title;
-  final String time;
-  final Color color;
-
-  const _ActivityData(this.icon, this.title, this.time, this.color);
+  final int startLevel, endLevel;
+  const _DiffData(this.name, this.color, this.subtitle, this.startLevel, this.endLevel);
 }
