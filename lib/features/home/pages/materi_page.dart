@@ -4,6 +4,7 @@ import 'package:clean_chord/features/metronom/pages/metronom_page.dart';
 import '../widgets/menu_card.dart';
 import 'package:clean_chord/features/pustaka_chord/pages/pustaka_chord_page.dart';
 import 'package:clean_chord/features/gambar_chord/pages/gambar_chord_page.dart';
+import '../../../core/progression/progression.dart';
 
 class MateriPage extends StatefulWidget {
   const MateriPage({super.key});
@@ -189,54 +190,61 @@ class _MateriPageState extends State<MateriPage> with TickerProviderStateMixin {
   }
 
   Widget _buildStatusBadge() {
-    return AnimatedBuilder(
-      animation: _pulseAnim,
+    return ListenableBuilder(
+      listenable: ProgressionService.instance,
       builder: (context, _) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: Colors.greenAccent.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Colors.greenAccent.withOpacity(
-                0.3 + 0.2 * _pulseAnim.value,
+        final p          = ProgressionService.instance.progress;
+        final levelId    = p.unlockedUpToLevel;
+        final difficulty = ProgressionConfig.difficultyOf(levelId);
+
+        // Warna & icon per difficulty
+        Color color;
+        IconData icon;
+        switch (difficulty) {
+          case 'Menengah':
+            color = const Color(0xFFBD00FF);
+            icon  = Icons.star_half_rounded;
+            break;
+          case 'Mahir':
+            color = const Color(0xFFFFAA00);
+            icon  = Icons.star_rounded;
+            break;
+          default: // Pemula
+            color = Colors.cyanAccent;
+            icon  = Icons.star_outline_rounded;
+        }
+
+        return AnimatedBuilder(
+          animation: _pulseAnim,
+          builder: (context, _) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: color.withOpacity(0.3 + 0.2 * _pulseAnim.value),
+                  width: 1,
+                ),
               ),
-              width: 1,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.greenAccent.withOpacity(
-                    0.6 + 0.4 * _pulseAnim.value,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.greenAccent.withOpacity(
-                        0.4 + 0.3 * _pulseAnim.value,
-                      ),
-                      blurRadius: 6,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: color.withOpacity(0.6 + 0.4 * _pulseAnim.value), size: 10),
+                  const SizedBox(width: 5),
+                  Text(
+                    difficulty.toUpperCase(),
+                    style: TextStyle(
+                      color: color.withOpacity(0.8),
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 5),
-              Text(
-                'ONLINE',
-                style: TextStyle(
-                  color: Colors.greenAccent.withOpacity(0.8),
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
