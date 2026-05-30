@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:clean_chord/features/kuis_chord/pages/kuis_chord_page.dart';
 import 'package:clean_chord/features/metronom/pages/metronom_page.dart';
@@ -21,6 +22,9 @@ class _MateriPageState extends State<MateriPage> with TickerProviderStateMixin {
   late Animation<double> _scanAnim;
   late List<Animation<double>> _cardAnims;
 
+  int _colorIndex = 0;
+  double _lastScanValue = 0.0; // untuk deteksi wrap-around
+
   @override
   void initState() {
     super.initState();
@@ -36,9 +40,23 @@ class _MateriPageState extends State<MateriPage> with TickerProviderStateMixin {
 
     _scanController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3000),
+      duration: const Duration(milliseconds: 4500),
     )..repeat();
     _scanAnim = CurvedAnimation(parent: _scanController, curve: Curves.linear);
+
+    // .repeat() tidak pernah trigger AnimationStatus.completed,
+    // jadi kita deteksi wrap-around manual: kalau value tiba-tiba
+    // lebih kecil dari value sebelumnya, berarti satu siklus baru dimulai.
+    _scanController.addListener(() {
+      final current = _scanController.value;
+      if (current < _lastScanValue) {
+        // wrap-around terjadi → ganti warna
+        setState(() {
+          _colorIndex = (_colorIndex + 1) % 4;
+        });
+      }
+      _lastScanValue = current;
+    });
 
     _gridFadeController = AnimationController(
       vsync: this,
@@ -179,10 +197,17 @@ class _MateriPageState extends State<MateriPage> with TickerProviderStateMixin {
               ),
             ],
           ),
-          child: const Icon(
-            Icons.queue_music_rounded,
-            color: Colors.cyanAccent,
-            size: 26,
+          child: ClipOval(
+            child: Image.asset(
+              'assets/images/iconapp.png',
+              fit: BoxFit.cover,
+              // Sudah di-precache di main.dart, jadi langsung muncul tanpa render delay
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.queue_music_rounded,
+                color: Colors.cyanAccent,
+                size: 26,
+              ),
+            ),
           ),
         );
       },
@@ -197,7 +222,6 @@ class _MateriPageState extends State<MateriPage> with TickerProviderStateMixin {
         final levelId    = p.unlockedUpToLevel;
         final difficulty = ProgressionConfig.difficultyOf(levelId);
 
-        // Warna & icon per difficulty
         Color color;
         IconData icon;
         switch (difficulty) {
@@ -209,7 +233,7 @@ class _MateriPageState extends State<MateriPage> with TickerProviderStateMixin {
             color = const Color(0xFFFFAA00);
             icon  = Icons.star_rounded;
             break;
-          default: // Pemula
+          default:
             color = Colors.cyanAccent;
             icon  = Icons.star_outline_rounded;
         }
@@ -251,40 +275,15 @@ class _MateriPageState extends State<MateriPage> with TickerProviderStateMixin {
   }
 
   Widget _buildScanBar() {
-    return AnimatedBuilder(
-      animation: _scanAnim,
-      builder: (context, _) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: Container(
-            height: 3,
-            width: double.infinity,
-            color: Colors.white.withOpacity(0.04),
-            child: FractionallySizedBox(
-              alignment: Alignment(_scanAnim.value * 2 - 1, 0),
-              widthFactor: 0.35,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(4),
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.transparent,
-                      Colors.cyanAccent.withOpacity(0.9),
-                      Colors.transparent,
-                    ],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.cyanAccent.withOpacity(0.6),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
+    return SizedBox(
+      height: 3,
+      width: double.infinity,
+      child: AnimatedBuilder(
+        animation: _scanAnim,
+        builder: (context, _) => CustomPaint(
+          painter: _ScanBarPainter(_scanAnim.value, _colorIndex),
+        ),
+      ),
     );
   }
 
@@ -358,16 +357,16 @@ class _MateriPageState extends State<MateriPage> with TickerProviderStateMixin {
         ),
       ),
       _CardData(
-      color: const Color(0xFF00FF9F),
-      title: 'Gambar Chord',
-      subtitle: 'Tebak lalu gambar',
-      icon: Icons.fingerprint_rounded, 
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => GambarChordPage()),
+        color: const Color(0xFF00FF9F),
+        title: 'Gambar Chord',
+        subtitle: 'Tebak lalu gambar',
+        icon: Icons.fingerprint_rounded,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => GambarChordPage()),
+        ),
       ),
-    ),
-  ];
+    ];
 
     return SingleChildScrollView(
       padding: EdgeInsets.zero,
@@ -464,4 +463,91 @@ class _CardData {
     required this.icon,
     this.onTap,
   });
+}
+
+// ── _ScanBarPainter ───────────────────────────────────────────
+// colorIndex dioper dari state dan hanya berubah saat wrap-around terdeteksi,
+// sehingga warna stabil penuh selama satu pass kiri→kanan.
+class _ScanBarPainter extends CustomPainter {
+  final double progress;
+  final int colorIndex;
+
+  static const _palette = [
+    Color(0xFF00FFFF), // cyan    — Kuis Chord
+    Color(0xFFFF00FF), // magenta — Pustaka Chord
+    Color(0xFF9D00FF), // purple  — Metronom
+    Color(0xFF00FF9F), // mint    — Gambar Chord
+  ];
+
+  static const double _cometWidth = 0.38;
+
+  const _ScanBarPainter(this.progress, this.colorIndex);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    // Track background
+    final bgPaint = Paint()
+      ..color = const Color(0xFFFFFFFF).withOpacity(0.04);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, w, h), const Radius.circular(2)),
+      bgPaint,
+    );
+
+    final baseColor = _palette[colorIndex % _palette.length];
+
+    final travel  = 1.0 + _cometWidth;
+    final centerX = (progress * travel - _cometWidth / 2) * w;
+    final halfW   = _cometWidth * w / 2;
+
+    final left  = centerX - halfW;
+    final right = centerX + halfW;
+
+    final rect = Rect.fromLTRB(left, 0, right, h);
+    final gradient = LinearGradient(
+      colors: [
+        Colors.transparent,
+        baseColor.withOpacity(0.5),
+        baseColor.withOpacity(0.95),
+        baseColor.withOpacity(0.5),
+        Colors.transparent,
+      ],
+      stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
+    );
+
+    final paint = Paint()
+      ..shader = gradient.createShader(rect)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(2)),
+      paint,
+    );
+
+    // Glow layer
+    final glowPaint = Paint()
+      ..shader = LinearGradient(
+        colors: [
+          Colors.transparent,
+          baseColor.withOpacity(0.3),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.5, 1.0],
+      ).createShader(rect)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        rect.inflate(1),
+        const Radius.circular(3),
+      ),
+      glowPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ScanBarPainter old) =>
+      old.progress != progress || old.colorIndex != colorIndex;
 }

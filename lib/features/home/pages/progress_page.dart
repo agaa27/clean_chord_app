@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../core/progression/progression.dart';
+import '../../../core/profile/profile.dart';
+import 'profile_setup_page.dart';
 
 class ProgressPage extends StatefulWidget {
   const ProgressPage({super.key});
@@ -16,8 +19,7 @@ class _ProgressPageState extends State<ProgressPage>
   late Animation<double>   _pulseAnim;
   late List<Animation<double>> _fadeAnims;
 
-  static const String _username = 'Rangga_Coustic';
-  static const int    _xpPerLevel = 500; // XP tiap "tier" di bar
+  static const int _xpPerLevel = 500;
 
   static const List<_DiffData> _diffs = [
     _DiffData('Pemula',   Color(0xFF00FFFF), 'Chord dasar, kunci mayor & minor',  1,  5),
@@ -117,17 +119,21 @@ class _ProgressPageState extends State<ProgressPage>
     );
   }
 
-  // ── HEADER — live dari engine ───────────────────────────────
+  // ── HEADER — live dari ProfileService + ProgressionService ──
   Widget _buildHeader() {
     return ListenableBuilder(
-      listenable: ProgressionService.instance,
+      // Dengerin keduanya: profil berubah saat edit, progression berubah saat main
+      listenable: Listenable.merge([
+        ProgressionService.instance,
+        ProfileService.instance,
+      ]),
       builder: (context, _) {
-        final p           = ProgressionService.instance.progress;
-        final xp          = p.totalXp;
-        final xpInTier    = xp % _xpPerLevel;
-        final xpFraction  = xpInTier / _xpPerLevel;
-        final levelLabel  = ProgressionConfig.difficultyOf(p.unlockedUpToLevel);
-        final overallPct  = (p.unlockedUpToLevel / ProgressionConfig.totalLevels * 100).toInt();
+        final p          = ProgressionService.instance.progress;
+        final xp         = p.totalXp;
+        final xpInTier   = xp % _xpPerLevel;
+        final xpFraction = xpInTier / _xpPerLevel;
+        final levelLabel = ProgressionConfig.difficultyOf(p.unlockedUpToLevel);
+        final overallPct = (p.unlockedUpToLevel / ProgressionConfig.totalLevels * 100).toInt();
 
         return AnimatedBuilder(
           animation: Listenable.merge([_pulseAnim, _fadeAnims[0]]),
@@ -157,8 +163,9 @@ class _ProgressPageState extends State<ProgressPage>
                       _buildAvatar(),
                       const SizedBox(width: 16),
                       Expanded(child: _buildProfileInfo(
-                        xp: xp, maxXp: _xpPerLevel, xpFraction: xpFraction,
+                        xp: xp, xpFraction: xpFraction,
                         levelLabel: levelLabel, overallPct: overallPct,
+                        context: context,
                       )),
                     ],
                   ),
@@ -171,7 +178,9 @@ class _ProgressPageState extends State<ProgressPage>
     );
   }
 
+  // ── Avatar: baca dari ProfileService ───────────────────────
   Widget _buildAvatar() {
+    final profile = ProfileService.instance.profile;
     return AnimatedBuilder(
       animation: _pulseAnim,
       builder: (context, _) => Container(
@@ -191,47 +200,140 @@ class _ProgressPageState extends State<ProgressPage>
             blurRadius: 16, spreadRadius: 2,
           )],
         ),
-        child: const Icon(Icons.person_rounded, color: Color(0xFF00FFFF), size: 36),
+        child: ClipOval(child: _avatarWidget(profile)),
       ),
+    );
+  }
+
+  Widget _avatarWidget(UserProfile? profile) {
+    if (profile == null) {
+      return const Icon(Icons.person_rounded, color: Color(0xFF00FFFF), size: 36);
+    }
+    if (profile.avatarType == 'file') {
+      return Image.file(
+        File(profile.avatarPath),
+        width: 72, height: 72,
+        fit: BoxFit.cover,
+        cacheWidth: 144,
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) =>
+            const Icon(Icons.person_rounded, color: Color(0xFF00FFFF), size: 36),
+      );
+    }
+    // avatarType == 'asset' — man.jpg / woman.jpg sudah di-precache di splash
+    return Image.asset(
+      profile.avatarPath,
+      width: 72, height: 72,
+      fit: BoxFit.cover,
+      cacheWidth: 144,
+      gaplessPlayback: true,
+      errorBuilder: (_, __, ___) =>
+          const Icon(Icons.person_rounded, color: Color(0xFF00FFFF), size: 36),
+    );
+  }
+
+  Widget _buildEditButton(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const ProfileSetupPage(isEdit: true),
+        ),
+      ),
+      child: AnimatedBuilder(
+        animation: _pulseAnim,
+        builder: (context, _) => Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: const Color(0xFF00FFFF).withOpacity(0.06),
+            border: Border.all(
+              color: const Color(0xFF00FFFF).withOpacity(0.2 + 0.1 * _pulseAnim.value),
+              width: 1,
+            ),
+          ),
+          child: const Icon(Icons.edit_rounded, color: Color(0xFF00FFFF), size: 16),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeleteButton(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _showDeleteConfirmDialog(context),
+      child: AnimatedBuilder(
+        animation: _pulseAnim,
+        builder: (context, _) => Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: const Color(0xFFFF2D55).withOpacity(0.06),
+            border: Border.all(
+              color: const Color(0xFFFF2D55).withOpacity(0.2 + 0.1 * _pulseAnim.value),
+              width: 1,
+            ),
+          ),
+          child: const Icon(Icons.delete_outline_rounded, color: Color(0xFFFF2D55), size: 16),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showDeleteConfirmDialog(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withOpacity(0.7),
+      builder: (ctx) => _DeleteConfirmDialog(pulseAnim: _pulseAnim),
     );
   }
 
   Widget _buildProfileInfo({
     required int xp,
-    required int maxXp,
     required double xpFraction,
     required String levelLabel,
     required int overallPct,
+    required BuildContext context,
   }) {
+    final name = ProfileService.instance.profile?.name ?? 'Pengguna';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(_username, style: const TextStyle(
+        Text(name, style: const TextStyle(
           fontFamily: 'Orbitron', color: Colors.white,
           fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1,
         )),
         const SizedBox(height: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-          decoration: BoxDecoration(
-            color: const Color(0xFF00FFFF).withOpacity(0.1),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFF00FFFF).withOpacity(0.4), width: 1),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.emoji_events_rounded, color: Color(0xFF00FFFF), size: 12),
-              const SizedBox(width: 4),
-              Text(levelLabel, style: const TextStyle(
-                fontFamily: 'Orbitron', color: Color(0xFF00FFFF),
-                fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5,
-              )),
-            ],
-          ),
+        // Level badge + tombol edit & hapus dalam satu Row
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFF00FFFF).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFF00FFFF).withOpacity(0.4), width: 1),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.emoji_events_rounded, color: Color(0xFF00FFFF), size: 12),
+                  const SizedBox(width: 4),
+                  Text(levelLabel, style: const TextStyle(
+                    fontFamily: 'Orbitron', color: Color(0xFF00FFFF),
+                    fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5,
+                  )),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            _buildEditButton(context),
+            const SizedBox(width: 6),
+            _buildDeleteButton(context),
+          ],
         ),
         const SizedBox(height: 10),
-        // XP bar
         Row(
           children: [
             const Text('XP', style: TextStyle(
@@ -307,47 +409,37 @@ class _ProgressPageState extends State<ProgressPage>
     );
   }
 
-  // ── STATS GRID — semua live dari ProgressionService ──────────
+  // ── STATS GRID ──────────────────────────────────────────────
   Widget _buildStatsGrid(Animation<double> anim) {
     return ListenableBuilder(
       listenable: ProgressionService.instance,
       builder: (context, _) {
         final p = ProgressionService.instance.progress;
 
-        // Hitung stats dari progression data
         final quizDone = p.completedLevels
-            .where((k) => k.startsWith('${ProgressionConfig.featureQuiz}_'))
-            .length;
+            .where((k) => k.startsWith('${ProgressionConfig.featureQuiz}_')).length;
         final gambarDone = p.completedLevels
-            .where((k) => k.startsWith('${ProgressionConfig.featureGambar}_'))
-            .length;
-        final totalDone  = quizDone + gambarDone;
-        final totalLevels = ProgressionConfig.totalLevels * 2; // quiz + gambar
+            .where((k) => k.startsWith('${ProgressionConfig.featureGambar}_')).length;
+        final totalDone   = quizDone + gambarDone;
+        final totalLevels = ProgressionConfig.totalLevels * 2;
 
-        // Streak: hitung consecutive hari dari recentActivities
         int streak = 0;
         if (p.recentActivities.isNotEmpty) {
           final dates = p.recentActivities
               .map((a) => DateTime(a.timestamp.year, a.timestamp.month, a.timestamp.day))
-              .toSet()
-              .toList()
-              ..sort((a, b) => b.compareTo(a));
+              .toSet().toList()..sort((a, b) => b.compareTo(a));
           final today = DateTime.now();
-          final todayDate = DateTime(today.year, today.month, today.day);
-          DateTime check = todayDate;
+          DateTime check = DateTime(today.year, today.month, today.day);
           for (final d in dates) {
             if (d == check || d == check.subtract(const Duration(days: 1))) {
-              streak++;
-              check = d;
-            } else {
-              break;
-            }
+              streak++; check = d;
+            } else break;
           }
         }
 
         final liveStats = [
-          _StatData(Icons.quiz_rounded,     'Kuis\nSelesai',   '$quizDone',    const Color(0xFFFF00FF)),
-          _StatData(Icons.draw_rounded,      'Gambar\nSelesai', '$gambarDone',  const Color(0xFF00FF88)),
+          _StatData(Icons.quiz_rounded,     'Kuis\nSelesai',   '$quizDone',   const Color(0xFFFF00FF)),
+          _StatData(Icons.draw_rounded,      'Gambar\nSelesai', '$gambarDone', const Color(0xFF00FF88)),
           _StatData(Icons.layers_rounded,    'Total\nSelesai',  '$totalDone/$totalLevels', const Color(0xFF00FFFF)),
           _StatData(Icons.local_fire_department_rounded, 'Streak\nBelajar', '$streak hari', const Color(0xFFFFAA00)),
           _StatData(Icons.lock_open_rounded, 'Level\nTerbuka',  '${p.unlockedUpToLevel}/${ProgressionConfig.totalLevels}', const Color(0xFF9D00FF)),
@@ -371,7 +463,7 @@ class _ProgressPageState extends State<ProgressPage>
     );
   }
 
-  // ── LEVELS — live dari engine, detail per-level per-feature ───
+  // ── LEVELS ──────────────────────────────────────────────────
   Widget _buildLevels(Animation<double> anim) {
     return ListenableBuilder(
       listenable: ProgressionService.instance,
@@ -383,20 +475,15 @@ class _ProgressPageState extends State<ProgressPage>
           child: Column(
             children: _diffs.map((d) {
               final isUnlocked = unlocked >= d.startLevel;
-              // Hitung berapa level yang sudah selesai di difficulty ini (per feature)
-              int quizCompleted   = 0;
-              int gambarCompleted = 0;
-              final totalInDiff   = d.endLevel - d.startLevel + 1;
+              int quizCompleted = 0, gambarCompleted = 0;
+              final totalInDiff = d.endLevel - d.startLevel + 1;
               for (int lvl = d.startLevel; lvl <= d.endLevel; lvl++) {
                 if (p.isLevelCompleted(ProgressionConfig.featureQuiz, lvl))   quizCompleted++;
                 if (p.isLevelCompleted(ProgressionConfig.featureGambar, lvl)) gambarCompleted++;
               }
               return _DiffCard(
-                data: d,
-                unlocked: isUnlocked,
-                pulseAnim: _pulseAnim,
-                quizCompleted: quizCompleted,
-                gambarCompleted: gambarCompleted,
+                data: d, unlocked: isUnlocked, pulseAnim: _pulseAnim,
+                quizCompleted: quizCompleted, gambarCompleted: gambarCompleted,
                 totalInDiff: totalInDiff,
               );
             }).toList(),
@@ -406,7 +493,7 @@ class _ProgressPageState extends State<ProgressPage>
     );
   }
 
-  // ── ACTIVITIES — live dari engine ────────────────────────────
+  // ── ACTIVITIES ──────────────────────────────────────────────
   Widget _buildActivities(Animation<double> anim) {
     return ListenableBuilder(
       listenable: ProgressionService.instance,
@@ -419,20 +506,18 @@ class _ProgressPageState extends State<ProgressPage>
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 32),
               child: Center(
-                child: Column(
-                  children: [
-                    Icon(Icons.inbox_rounded, color: Colors.white12, size: 40),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Belum ada aktivitas.\nMulai belajar sekarang!',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontFamily: 'Orbitron', color: Colors.white24,
-                        fontSize: 12, height: 1.6,
-                      ),
+                child: Column(children: [
+                  const Icon(Icons.inbox_rounded, color: Colors.white12, size: 40),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Belum ada aktivitas.\nMulai belajar sekarang!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'Orbitron', color: Colors.white24,
+                      fontSize: 12, height: 1.6,
                     ),
-                  ],
-                ),
+                  ),
+                ]),
               ),
             ),
           );
@@ -452,28 +537,24 @@ class _ProgressPageState extends State<ProgressPage>
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Timeline
                     SizedBox(
                       width: 36,
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 32, height: 32,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: color.withOpacity(0.12),
-                              border: Border.all(color: color.withOpacity(0.5), width: 1.5),
-                              boxShadow: [BoxShadow(color: color.withOpacity(0.2), blurRadius: 8)],
-                            ),
-                            child: Icon(icon, color: color, size: 15),
+                      child: Column(children: [
+                        Container(
+                          width: 32, height: 32,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: color.withOpacity(0.12),
+                            border: Border.all(color: color.withOpacity(0.5), width: 1.5),
+                            boxShadow: [BoxShadow(color: color.withOpacity(0.2), blurRadius: 8)],
                           ),
-                          if (!isLast)
-                            Expanded(child: Container(width: 1.5, color: color.withOpacity(0.2))),
-                        ],
-                      ),
+                          child: Icon(icon, color: color, size: 15),
+                        ),
+                        if (!isLast)
+                          Expanded(child: Container(width: 1.5, color: color.withOpacity(0.2))),
+                      ]),
                     ),
                     const SizedBox(width: 12),
-                    // Card
                     Expanded(
                       child: Container(
                         margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
@@ -536,8 +617,7 @@ class _StatCard extends StatelessWidget {
           color: const Color(0xFF0D0D0D),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: data.color.withOpacity(0.25 + 0.15 * pulseAnim.value),
-            width: 1.2,
+            color: data.color.withOpacity(0.25 + 0.15 * pulseAnim.value), width: 1.2,
           ),
           boxShadow: [BoxShadow(
             color: data.color.withOpacity(0.05 + 0.04 * pulseAnim.value),
@@ -564,10 +644,10 @@ class _StatCard extends StatelessWidget {
             )),
             const SizedBox(height: 4),
             Text(data.label, textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontFamily: 'Orbitron', color: Colors.white38,
-                  fontSize: 8.5, letterSpacing: 0.3, height: 1.4,
-                )),
+              style: const TextStyle(
+                fontFamily: 'Orbitron', color: Colors.white38,
+                fontSize: 8.5, letterSpacing: 0.3, height: 1.4,
+              )),
           ],
         ),
       ),
@@ -575,21 +655,15 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-// ── _DiffCard (level progression) — live lock/unlock ────────
+// ── _DiffCard ────────────────────────────────────────────────
 class _DiffCard extends StatelessWidget {
   final _DiffData data;
   final bool unlocked;
   final Animation<double> pulseAnim;
-  final int quizCompleted;
-  final int gambarCompleted;
-  final int totalInDiff;
+  final int quizCompleted, gambarCompleted, totalInDiff;
   const _DiffCard({
-    required this.data,
-    required this.unlocked,
-    required this.pulseAnim,
-    this.quizCompleted = 0,
-    this.gambarCompleted = 0,
-    this.totalInDiff = 0,
+    required this.data, required this.unlocked, required this.pulseAnim,
+    this.quizCompleted = 0, this.gambarCompleted = 0, this.totalInDiff = 0,
   });
 
   @override
@@ -623,8 +697,7 @@ class _DiffCard extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: data.color.withOpacity(unlocked ? 0.15 : 0.05),
                   border: Border.all(
-                    color: unlocked ? data.color.withOpacity(0.5) : Colors.white12,
-                    width: 1.5,
+                    color: unlocked ? data.color.withOpacity(0.5) : Colors.white12, width: 1.5,
                   ),
                   boxShadow: unlocked
                       ? [BoxShadow(color: data.color.withOpacity(0.25), blurRadius: 12)]
@@ -632,8 +705,7 @@ class _DiffCard extends StatelessWidget {
                 ),
                 child: Icon(
                   unlocked ? Icons.emoji_events_rounded : Icons.lock_rounded,
-                  color: unlocked ? data.color : Colors.white24,
-                  size: 22,
+                  color: unlocked ? data.color : Colors.white24, size: 22,
                 ),
               ),
               const SizedBox(width: 14),
@@ -641,29 +713,27 @@ class _DiffCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Text(data.name, style: TextStyle(
-                          fontFamily: 'Orbitron',
-                          color: unlocked ? Colors.white : Colors.white38,
-                          fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5,
-                        )),
-                        const SizedBox(width: 8),
-                        if (unlocked)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: data.color.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: data.color.withOpacity(0.4), width: 1),
-                            ),
-                            child: Text('AKTIF', style: TextStyle(
-                              fontFamily: 'Orbitron', color: data.color,
-                              fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1,
-                            )),
+                    Row(children: [
+                      Text(data.name, style: TextStyle(
+                        fontFamily: 'Orbitron',
+                        color: unlocked ? Colors.white : Colors.white38,
+                        fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5,
+                      )),
+                      const SizedBox(width: 8),
+                      if (unlocked)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: data.color.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: data.color.withOpacity(0.4), width: 1),
                           ),
-                      ],
-                    ),
+                          child: Text('AKTIF', style: TextStyle(
+                            fontFamily: 'Orbitron', color: data.color,
+                            fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1,
+                          )),
+                        ),
+                    ]),
                     const SizedBox(height: 4),
                     Text(data.subtitle, style: const TextStyle(
                       fontFamily: 'Orbitron', color: Colors.white38,
@@ -672,18 +742,14 @@ class _DiffCard extends StatelessWidget {
                     if (unlocked && totalInDiff > 0) ...[
                       const SizedBox(height: 8),
                       _FeatureProgressRow(
-                        icon: Icons.quiz_rounded,
-                        label: 'Kuis',
-                        done: quizCompleted,
-                        total: totalInDiff,
+                        icon: Icons.quiz_rounded, label: 'Kuis',
+                        done: quizCompleted, total: totalInDiff,
                         color: const Color(0xFF00FFFF),
                       ),
                       const SizedBox(height: 4),
                       _FeatureProgressRow(
-                        icon: Icons.draw_rounded,
-                        label: 'Gambar',
-                        done: gambarCompleted,
-                        total: totalInDiff,
+                        icon: Icons.draw_rounded, label: 'Gambar',
+                        done: gambarCompleted, total: totalInDiff,
                         color: const Color(0xFF00FF88),
                       ),
                     ],
@@ -692,8 +758,7 @@ class _DiffCard extends StatelessWidget {
               ),
               Icon(
                 unlocked ? Icons.check_circle_rounded : Icons.lock_rounded,
-                color: unlocked ? data.color : Colors.white12,
-                size: 20,
+                color: unlocked ? data.color : Colors.white12, size: 20,
               ),
             ],
           ),
@@ -703,7 +768,7 @@ class _DiffCard extends StatelessWidget {
   }
 }
 
-// ── _FeatureProgressRow ───────────────────────────────────────
+// ── _FeatureProgressRow ──────────────────────────────────────
 class _FeatureProgressRow extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -730,14 +795,198 @@ class _FeatureProgressRow extends StatelessWidget {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: pct,
-              minHeight: 4,
+              value: pct, minHeight: 4,
               backgroundColor: color.withOpacity(0.1),
               valueColor: AlwaysStoppedAnimation<Color>(color),
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+// ── _DeleteConfirmDialog ────────────────────────────────────
+class _DeleteConfirmDialog extends StatelessWidget {
+  final Animation<double> pulseAnim;
+  const _DeleteConfirmDialog({required this.pulseAnim});
+
+  static const _red    = Color(0xFFFF2D55);
+  static const _cyan   = Color(0xFF00E5FF);
+  static const _bg     = Color(0xFF0D0D0D);
+
+  Future<void> _doDelete(BuildContext context) async {
+    // Reset profil dan progression
+    await ProfileService.instance.reset();
+    await ProgressionService.instance.resetProgress();
+
+    if (!context.mounted) return;
+
+    // Tutup dialog, lalu replace seluruh stack ke ProfileSetupPage
+    Navigator.of(context).pop();
+    Navigator.of(context).pushAndRemoveUntil(
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 500),
+        pageBuilder: (_, __, ___) => const ProfileSetupPage(),
+        transitionsBuilder: (_, anim, __, child) => FadeTransition(
+          opacity: CurvedAnimation(parent: anim, curve: Curves.easeIn),
+          child: child,
+        ),
+      ),
+      (route) => false, // hapus semua route di stack
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+      child: AnimatedBuilder(
+        animation: pulseAnim,
+        builder: (context, _) {
+          return Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: _bg,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: _red.withOpacity(0.3 + 0.15 * pulseAnim.value),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: _red.withOpacity(0.08 + 0.06 * pulseAnim.value),
+                  blurRadius: 24, spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Icon peringatan
+                Container(
+                  width: 60, height: 60,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _red.withOpacity(0.08),
+                    border: Border.all(
+                      color: _red.withOpacity(0.35 + 0.2 * pulseAnim.value),
+                      width: 1.5,
+                    ),
+                    boxShadow: [BoxShadow(
+                      color: _red.withOpacity(0.15 + 0.1 * pulseAnim.value),
+                      blurRadius: 16,
+                    )],
+                  ),
+                  child: const Icon(
+                    Icons.warning_rounded, color: _red, size: 28,
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Judul
+                const Text(
+                  'Hapus Akun?',
+                  style: TextStyle(
+                    fontFamily: 'Orbitron', color: Colors.white,
+                    fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1,
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                // Keterangan
+                const Text(
+                  'Hapus akun dan mulai dari awal',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Orbitron', color: _red,
+                    fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5,
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                const Text(
+                  'Semua data profil, XP, level, dan progress akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Orbitron', color: Colors.white38,
+                    fontSize: 10, height: 1.6, letterSpacing: 0.2,
+                  ),
+                ),
+
+                const SizedBox(height: 28),
+
+                // Tombol aksi
+                Row(
+                  children: [
+                    // Batal
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => Navigator.of(context).pop(),
+                        child: Container(
+                          height: 46,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.white.withOpacity(0.05),
+                            border: Border.all(color: Colors.white12, width: 1),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'BATAL',
+                              style: TextStyle(
+                                fontFamily: 'Orbitron', color: Colors.white54,
+                                fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    // Hapus
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => _doDelete(context),
+                        child: Container(
+                          height: 46,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            gradient: LinearGradient(
+                              colors: [
+                                _red.withOpacity(0.85),
+                                const Color(0xFFBB0033).withOpacity(0.85),
+                              ],
+                            ),
+                            boxShadow: [BoxShadow(
+                              color: _red.withOpacity(0.25 + 0.15 * pulseAnim.value),
+                              blurRadius: 12,
+                            )],
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'HAPUS',
+                              style: TextStyle(
+                                fontFamily: 'Orbitron', color: Colors.white,
+                                fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

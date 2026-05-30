@@ -36,6 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   audioplayers: ^5.2.1
   shared_preferences: ^2.3.2
+  image_picker: ^1.2.2
 
 dev_dependencies:
   flutter_test:
@@ -67,6 +68,9 @@ flutter:
     - assets/audio/quiz_win.mp3
     - assets/audio/quiz_wrong.mp3
     - assets/images/Ranggas.jpeg
+    - assets/images/man.jpg
+    - assets/images/woman.jpg
+    - assets/images/iconapp.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../../../core/profile/profile.dart';
 import 'home_page.dart';
+import 'profile_setup_page.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -11,14 +13,12 @@ class SplashPage extends StatefulWidget {
 
 class _SplashPageState extends State<SplashPage>
     with TickerProviderStateMixin {
-  // Controllers
   late AnimationController _logoController;
   late AnimationController _progressController;
   late AnimationController _textController;
   late AnimationController _pulseController;
   late AnimationController _ringController;
 
-  // Animations
   late Animation<double> _logoScale;
   late Animation<double> _logoFade;
   late Animation<double> _logoGlow;
@@ -33,11 +33,23 @@ class _SplashPageState extends State<SplashPage>
   static const _purple = Color(0xFF9D00FF);
   static const _bg     = Color(0xFF070A0F);
 
+  bool _imagesCached = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_imagesCached) {
+      _imagesCached = true;
+      precacheImage(const AssetImage('assets/images/iconapp.png'), context);
+      precacheImage(const AssetImage('assets/images/man.jpg'), context);
+      precacheImage(const AssetImage('assets/images/woman.jpg'), context);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
 
-    // ── Logo: scale + fade in ──────────────────────────────────
     _logoController = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 900),
     );
@@ -46,19 +58,16 @@ class _SplashPageState extends State<SplashPage>
     _logoFade = CurvedAnimation(parent: _logoController, curve: const Interval(0, 0.5))
         .drive(Tween(begin: 0.0, end: 1.0));
 
-    // ── Pulse ring around logo ─────────────────────────────────
     _pulseController = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1800),
     )..repeat(reverse: true);
     _pulseAnim = CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut);
 
-    // ── Rotating ring ──────────────────────────────────────────
     _ringController = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 3000),
     )..repeat();
     _ringAnim = _ringController;
 
-    // ── Text: title + caption slide up ────────────────────────
     _textController = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 700),
     );
@@ -71,10 +80,8 @@ class _SplashPageState extends State<SplashPage>
       curve: const Interval(0.2, 1.0, curve: Curves.easeOutCubic),
     ).drive(Tween(begin: const Offset(0, 0.6), end: Offset.zero));
 
-    // ── Logo glow intensity ────────────────────────────────────
     _logoGlow = _pulseAnim.drive(Tween(begin: 0.3, end: 0.8));
 
-    // ── Progress bar ───────────────────────────────────────────
     _progressController = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 2200),
     );
@@ -83,30 +90,31 @@ class _SplashPageState extends State<SplashPage>
       curve: Curves.easeInOutCubic,
     );
 
-    // ── Sequence ───────────────────────────────────────────────
     _startSequence();
   }
 
   Future<void> _startSequence() async {
-    // 1. Logo appears
     await Future.delayed(const Duration(milliseconds: 200));
     _logoController.forward();
 
-    // 2. Text slides in
     await Future.delayed(const Duration(milliseconds: 600));
     _textController.forward();
 
-    // 3. Progress bar fills
     await Future.delayed(const Duration(milliseconds: 300));
     _progressController.forward();
 
-    // 4. Navigate to home when progress done + small buffer
     await Future.delayed(const Duration(milliseconds: 2600));
     if (!mounted) return;
+
+    // ── Cek profil: belum ada → ProfileSetupPage, sudah ada → HomePage ──
+    final Widget destination = ProfileService.instance.hasProfile
+        ? const HomePage()
+        : const ProfileSetupPage();
+
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 600),
-        pageBuilder: (_, __, ___) => const HomePage(),
+        pageBuilder: (_, __, ___) => destination,
         transitionsBuilder: (_, anim, __, child) => FadeTransition(
           opacity: CurvedAnimation(parent: anim, curve: Curves.easeIn),
           child: child,
@@ -132,27 +140,15 @@ class _SplashPageState extends State<SplashPage>
       body: SafeArea(
         child: Stack(
           children: [
-            // Background subtle grid pattern
             Positioned.fill(child: _buildBgGrid()),
-
-            // Main content
             Column(
               children: [
                 const Spacer(flex: 3),
-
-                // ── Logo area ──────────────────────────────────
                 _buildLogo(),
-
                 const SizedBox(height: 36),
-
-                // ── App name + caption ─────────────────────────
                 _buildText(),
-
                 const Spacer(flex: 2),
-
-                // ── Progress bar ───────────────────────────────
                 _buildProgressBar(),
-
                 const SizedBox(height: 40),
               ],
             ),
@@ -162,12 +158,8 @@ class _SplashPageState extends State<SplashPage>
     );
   }
 
-  // ── Background grid ────────────────────────────────────────────
-  Widget _buildBgGrid() {
-    return CustomPaint(painter: _GridPainter());
-  }
+  Widget _buildBgGrid() => CustomPaint(painter: _GridPainter());
 
-  // ── Logo ───────────────────────────────────────────────────────
   Widget _buildLogo() {
     return AnimatedBuilder(
       animation: Listenable.merge([_logoController, _pulseAnim, _ringAnim]),
@@ -177,40 +169,30 @@ class _SplashPageState extends State<SplashPage>
           child: ScaleTransition(
             scale: _logoScale,
             child: SizedBox(
-              width: 140,
-              height: 140,
+              width: 140, height: 140,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  // Outer glow
                   Container(
-                    width: 140,
-                    height: 140,
+                    width: 140, height: 140,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: _cyan.withOpacity(0.12 + 0.1 * _pulseAnim.value),
-                          blurRadius: 40 + 20 * _pulseAnim.value,
-                          spreadRadius: 8,
-                        ),
-                      ],
+                      boxShadow: [BoxShadow(
+                        color: _cyan.withOpacity(0.12 + 0.1 * _pulseAnim.value),
+                        blurRadius: 40 + 20 * _pulseAnim.value,
+                        spreadRadius: 8,
+                      )],
                     ),
                   ),
-
-                  // Rotating dashed ring
                   Transform.rotate(
                     angle: _ringAnim.value * 2 * math.pi,
                     child: CustomPaint(
                       size: const Size(130, 130),
                       painter: _DashedRingPainter(
-                        color: _cyan.withOpacity(0.25),
-                        strokeWidth: 1.5,
+                        color: _cyan.withOpacity(0.25), strokeWidth: 1.5,
                       ),
                     ),
                   ),
-
-                  // Pulse ring
                   Container(
                     width: 110 + 8 * _pulseAnim.value,
                     height: 110 + 8 * _pulseAnim.value,
@@ -222,36 +204,24 @@ class _SplashPageState extends State<SplashPage>
                       ),
                     ),
                   ),
-
-                  // Main logo circle
                   Container(
-                    width: 96,
-                    height: 96,
+                    width: 96, height: 96,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: LinearGradient(
-                        colors: [
-                          _cyan.withOpacity(0.15),
-                          _purple.withOpacity(0.2),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                        colors: [_cyan.withOpacity(0.15), _purple.withOpacity(0.2)],
+                        begin: Alignment.topLeft, end: Alignment.bottomRight,
                       ),
                       border: Border.all(
                         color: _cyan.withOpacity(0.4 + 0.2 * _pulseAnim.value),
                         width: 2,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _cyan.withOpacity(_logoGlow.value * 0.4),
-                          blurRadius: 20,
-                          spreadRadius: 2,
-                        ),
-                      ],
+                      boxShadow: [BoxShadow(
+                        color: _cyan.withOpacity(_logoGlow.value * 0.4),
+                        blurRadius: 20, spreadRadius: 2,
+                      )],
                     ),
-                    child: Center(
-                      child: _buildLogoIcon(),
-                    ),
+                    child: Center(child: _buildLogoIcon()),
                   ),
                 ],
               ),
@@ -262,45 +232,29 @@ class _SplashPageState extends State<SplashPage>
     );
   }
 
-  // Guitar / music icon sebagai placeholder logo
   Widget _buildLogoIcon() {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        // Fretboard shape
-        Icon(
+    // Sudah di-precache di main.dart → langsung muncul tanpa jank
+    return ClipOval(
+      child: Image.asset(
+        'assets/images/iconapp.png',
+        width: 88,
+        height: 88,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Icon(
           Icons.music_note_rounded,
           color: _cyan,
           size: 44,
-          shadows: [
-            Shadow(color: _cyan.withOpacity(0.8), blurRadius: 12),
-          ],
+          shadows: [Shadow(color: _cyan.withOpacity(0.8), blurRadius: 12)],
         ),
-        // Small accent dot
-        Positioned(
-          right: 16,
-          top: 16,
-          child: Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _purple,
-              boxShadow: [BoxShadow(color: _purple.withOpacity(0.8), blurRadius: 6)],
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
-  // ── Text ───────────────────────────────────────────────────────
   Widget _buildText() {
     return FadeTransition(
       opacity: _textFade,
       child: Column(
         children: [
-          // App name
           SlideTransition(
             position: _titleSlide,
             child: ShaderMask(
@@ -311,39 +265,25 @@ class _SplashPageState extends State<SplashPage>
               child: const Text(
                 'CLEAN CHORD',
                 style: TextStyle(
-                  fontFamily: 'Orbitron',
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 4,
-                  color: Colors.white, // masked by shader
+                  fontFamily: 'Orbitron', fontSize: 28,
+                  fontWeight: FontWeight.w900, letterSpacing: 4, color: Colors.white,
                 ),
               ),
             ),
           ),
-
           const SizedBox(height: 10),
-
-          // Divider line
           SlideTransition(
             position: _titleSlide,
             child: Container(
-              width: 180,
-              height: 1,
+              width: 180, height: 1,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [
-                    Colors.transparent,
-                    _cyan.withOpacity(0.6),
-                    Colors.transparent,
-                  ],
+                  colors: [Colors.transparent, _cyan.withOpacity(0.6), Colors.transparent],
                 ),
               ),
             ),
           ),
-
           const SizedBox(height: 14),
-
-          // Caption
           SlideTransition(
             position: _captionSlide,
             child: Row(
@@ -354,11 +294,8 @@ class _SplashPageState extends State<SplashPage>
                 Text(
                   'Mulailah sebagai pemula',
                   style: TextStyle(
-                    fontFamily: 'Orbitron',
-                    fontSize: 12,
-                    color: Colors.white.withOpacity(0.5),
-                    letterSpacing: 1.5,
-                    fontWeight: FontWeight.w400,
+                    fontFamily: 'Orbitron', fontSize: 12,
+                    color: Colors.white.withOpacity(0.5), letterSpacing: 1.5,
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -371,7 +308,6 @@ class _SplashPageState extends State<SplashPage>
     );
   }
 
-  // ── Progress bar ───────────────────────────────────────────────
   Widget _buildProgressBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 48),
@@ -381,48 +317,28 @@ class _SplashPageState extends State<SplashPage>
           final pct = _progressAnim.value;
           return Column(
             children: [
-              // Progress track
               ClipRRect(
                 borderRadius: BorderRadius.circular(100),
-                child: Stack(
-                  children: [
-                    // Track background
-                    Container(
+                child: Stack(children: [
+                  Container(height: 3, color: Colors.white.withOpacity(0.06)),
+                  FractionallySizedBox(
+                    widthFactor: pct,
+                    child: Container(
                       height: 3,
-                      color: Colors.white.withOpacity(0.06),
-                    ),
-                    // Fill
-                    FractionallySizedBox(
-                      widthFactor: pct,
-                      child: Container(
-                        height: 3,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [_cyan, _purple],
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: _cyan.withOpacity(0.6),
-                              blurRadius: 6,
-                            ),
-                          ],
-                        ),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(colors: [_cyan, _purple]),
+                        boxShadow: [BoxShadow(color: _cyan.withOpacity(0.6), blurRadius: 6)],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ]),
               ),
-
               const SizedBox(height: 12),
-
-              // Loading label
               Text(
                 _loadingLabel(pct),
                 style: TextStyle(
-                  fontFamily: 'Orbitron',
-                  fontSize: 9,
-                  color: Colors.white.withOpacity(0.3),
-                  letterSpacing: 2,
+                  fontFamily: 'Orbitron', fontSize: 9,
+                  color: Colors.white.withOpacity(0.3), letterSpacing: 2,
                 ),
               ),
             ],
@@ -440,15 +356,12 @@ class _SplashPageState extends State<SplashPage>
   }
 }
 
-// ── Custom painters ────────────────────────────────────────────────
-
 class _GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = const Color(0xFF00E5FF).withOpacity(0.03)
       ..strokeWidth = 1;
-
     const spacing = 32.0;
     for (double x = 0; x < size.width; x += spacing) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
@@ -457,7 +370,6 @@ class _GridPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }
   }
-
   @override
   bool shouldRepaint(_GridPainter _) => false;
 }
@@ -470,30 +382,20 @@ class _DashedRingPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = color
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
+      ..color = color ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke ..strokeCap = StrokeCap.round;
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
-    const dashCount = 16;
-    const dashAngle = 2 * math.pi / dashCount;
+    const dashCount   = 16;
+    const dashAngle   = 2 * math.pi / dashCount;
     const gapFraction = 0.4;
-
     for (int i = 0; i < dashCount; i++) {
-      final startAngle = i * dashAngle;
-      final sweepAngle = dashAngle * (1 - gapFraction);
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
-        startAngle,
-        sweepAngle,
-        false,
-        paint,
+        i * dashAngle, dashAngle * (1 - gapFraction), false, paint,
       );
     }
   }
-
   @override
   bool shouldRepaint(_DashedRingPainter old) =>
       old.color != color || old.strokeWidth != strokeWidth;

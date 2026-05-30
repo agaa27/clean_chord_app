@@ -181,7 +181,7 @@ class _AboutPageState extends State<AboutPage>
         const SizedBox(height: 8),
         // Role
         Text(
-          'Flutter Developer  •  Clean Chord App',
+          'Developer For  •  Clean Chord App',
           style: TextStyle(
             fontFamily: 'Orbitron',
             fontSize: 10,
@@ -212,9 +212,9 @@ class _AboutPageState extends State<AboutPage>
           ),
           const SizedBox(height: 12),
           Text(
-            'Aplikasi pembelajaran gitar interaktif berbasis Flutter '
-            'untuk membantu pengguna mempelajari chord gitar secara '
-            'visual dan praktik.',
+            'Aplikasi pembelajaran gitar untuk pemula berbasis Flutter '
+            'untuk membantu pengguna mempelajari chord gitar '
+            'dengan banyak fitur.',
             style: TextStyle(
               fontFamily: 'Orbitron',
               fontSize: 11,
@@ -371,7 +371,7 @@ class _AboutPageState extends State<AboutPage>
                 size: 14, color: _C.cyan.withOpacity(0.8)),
             const SizedBox(width: 8),
             Text(
-              'v1.0',
+              'v1.0.0',
               style: TextStyle(
                 fontFamily: 'Orbitron',
                 fontSize: 10,
