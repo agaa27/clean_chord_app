@@ -26,8 +26,6 @@ class ProgressionService extends ChangeNotifier {
   }
 
   // ── Public helpers ───────────────────────────────────────────
-  bool isLevelUnlocked(int levelId) => _progress.isLevelUnlocked(levelId);
-
   bool isLevelCompleted(String featureKey, int levelId) =>
       _progress.isLevelCompleted(featureKey, levelId);
 
@@ -42,20 +40,25 @@ class ProgressionService extends ChangeNotifier {
   }) async {
     final alreadyDone = isLevelCompleted(featureKey, levelId);
     final xpGain      = alreadyDone ? 0 : ProgressionConfig.xpForCompleting(featureKey, levelId);
-    final nextUnlock  = ProgressionConfig.nextLevelToUnlock(levelId);
-    final didUnlockNew = !alreadyDone &&
-        nextUnlock != null &&
-        nextUnlock > _progress.unlockedUpToLevel;
+
+    // Apakah level berikutnya (di fitur ini) belum pernah selesai — artinya ini pertama kali unlock
+    final nextLevelId   = levelId + 1;
+    final hasNextLevel  = nextLevelId <= ProgressionConfig.totalLevels;
+    final didUnlockNext = !alreadyDone && hasNextLevel &&
+        !_progress.isLevelCompleted(featureKey, nextLevelId);
 
     if (!alreadyDone) {
       final newCompleted = Set<String>.from(_progress.completedLevels)
         ..add('${featureKey}_$levelId');
 
-      final newUnlockedUpTo = didUnlockNew ? nextUnlock! : _progress.unlockedUpToLevel;
+      // unlockedUpToLevel tetap diupdate untuk keperluan XP tier / progress_page
+      final newUnlockedUpTo = levelId > _progress.unlockedUpToLevel
+          ? levelId
+          : _progress.unlockedUpToLevel;
 
       final activity = ActivityEntry(
         message: customMessage ??
-            _defaultMessage(featureKey, levelId, didUnlockNew, nextUnlock),
+            _defaultMessage(featureKey, levelId, didUnlockNext, hasNextLevel ? nextLevelId : null),
         featureKey: featureKey,
         levelId: levelId,
         timestamp: DateTime.now(),
@@ -80,7 +83,7 @@ class ProgressionService extends ChangeNotifier {
       featureKey: featureKey,
       levelId: levelId,
       xpGained: xpGain,
-      unlockedNextLevel: didUnlockNew ? nextUnlock : null,
+      unlockedNextLevel: didUnlockNext ? nextLevelId : null,
       alreadyCompleted: alreadyDone,
     );
   }
@@ -109,11 +112,11 @@ class ProgressionService extends ChangeNotifier {
   // ── Private ──────────────────────────────────────────────────
   Future<void> _save() => ProgressionStorageService.instance.save(_progress);
 
-  String _defaultMessage(String featureKey, int levelId, bool didUnlock, int? nextUnlock) {
+  String _defaultMessage(String featureKey, int levelId, bool didUnlock, int? nextLevelId) {
     final name = _featureName(featureKey);
-    if (didUnlock && nextUnlock != null) {
-      final nd = ProgressionConfig.difficultyOf(nextUnlock);
-      return 'Selesai $name Level $levelId — Unlock $nd Level $nextUnlock!';
+    if (didUnlock && nextLevelId != null) {
+      final nd = ProgressionConfig.difficultyOf(nextLevelId);
+      return 'Selesai $name Level $levelId — Unlock $nd Level $nextLevelId!';
     }
     final d = ProgressionConfig.difficultyOf(levelId);
     return 'Selesai $name $d Level $levelId';

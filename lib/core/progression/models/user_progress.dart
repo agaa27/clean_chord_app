@@ -32,18 +32,27 @@ class UserProgress {
 
   // ── Computed helpers ────────────────────────────────────────
 
-  /// Apakah level [levelId] sudah di-unlock?
-  /// Level di-unlock jika levelId <= unlockedUpToLevel.
-  bool isLevelUnlocked(int levelId) => levelId <= unlockedUpToLevel;
-
   /// Apakah level [levelId] pada fitur [featureKey] sudah selesai?
   bool isLevelCompleted(String featureKey, int levelId) =>
       completedLevels.contains('${featureKey}_$levelId');
 
+  /// Apakah level [levelId] pada fitur [featureKey] sudah di-unlock?
+  ///
+  /// Aturan per-fitur yang benar-benar bertahap:
+  ///   - Level 1 selalu terbuka.
+  ///   - Level N terbuka hanya jika level (N-1) di fitur yang SAMA sudah selesai.
+  ///
+  /// [unlockedUpToLevel] tetap dipakai hanya untuk progress_page (XP tier),
+  /// bukan untuk menentukan buka/tutup level di selection page.
+  bool isLevelUnlockedForFeature(String featureKey, int levelId) {
+    if (levelId <= 1) return true;
+    return isLevelCompleted(featureKey, levelId - 1);
+  }
+
   /// Status card level: locked / unlocked / completed.
   LevelStatus levelStatus(String featureKey, int levelId) {
     if (isLevelCompleted(featureKey, levelId)) return LevelStatus.completed;
-    if (isLevelUnlocked(levelId)) return LevelStatus.unlocked;
+    if (isLevelUnlockedForFeature(featureKey, levelId)) return LevelStatus.unlocked;
     return LevelStatus.locked;
   }
 

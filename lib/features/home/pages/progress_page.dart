@@ -19,16 +19,6 @@ class _ProgressPageState extends State<ProgressPage>
   static const String _username = 'Rangga_Coustic';
   static const int    _xpPerLevel = 500; // XP tiap "tier" di bar
 
-  // Stats tetap dummy — nanti bisa di-connect ke engine
-  static const List<_StatData> _stats = [
-    _StatData(Icons.library_music_rounded, 'Chord\nDipelajari', '24', Color(0xFF00FFFF)),
-    _StatData(Icons.quiz_rounded,          'Kuis\nSelesai',     '8',  Color(0xFFFF00FF)),
-    _StatData(Icons.gps_fixed_rounded,     'Akurasi\nKuis',    '82%', Color(0xFF9D00FF)),
-    _StatData(Icons.local_fire_department_rounded, 'Streak\nBelajar', '5 hari', Color(0xFFFFAA00)),
-    _StatData(Icons.draw_rounded,          'Progress\nGambar', '12/30', Color(0xFF00FF88)),
-    _StatData(Icons.stars_rounded,         'Total XP',          '-',  Color(0xFFFF4488)),
-  ];
-
   static const List<_DiffData> _diffs = [
     _DiffData('Pemula',   Color(0xFF00FFFF), 'Chord dasar, kunci mayor & minor',  1,  5),
     _DiffData('Menengah', Color(0xFFFF00FF), 'Chord 7th, barre chord, transisi',  6, 13),
@@ -317,16 +307,53 @@ class _ProgressPageState extends State<ProgressPage>
     );
   }
 
-  // ── STATS GRID — XP card live, sisanya dummy ─────────────────
+  // ── STATS GRID — semua live dari ProgressionService ──────────
   Widget _buildStatsGrid(Animation<double> anim) {
     return ListenableBuilder(
       listenable: ProgressionService.instance,
       builder: (context, _) {
-        final liveXp = ProgressionService.instance.totalXp;
+        final p = ProgressionService.instance.progress;
+
+        // Hitung stats dari progression data
+        final quizDone = p.completedLevels
+            .where((k) => k.startsWith('${ProgressionConfig.featureQuiz}_'))
+            .length;
+        final gambarDone = p.completedLevels
+            .where((k) => k.startsWith('${ProgressionConfig.featureGambar}_'))
+            .length;
+        final totalDone  = quizDone + gambarDone;
+        final totalLevels = ProgressionConfig.totalLevels * 2; // quiz + gambar
+
+        // Streak: hitung consecutive hari dari recentActivities
+        int streak = 0;
+        if (p.recentActivities.isNotEmpty) {
+          final dates = p.recentActivities
+              .map((a) => DateTime(a.timestamp.year, a.timestamp.month, a.timestamp.day))
+              .toSet()
+              .toList()
+              ..sort((a, b) => b.compareTo(a));
+          final today = DateTime.now();
+          final todayDate = DateTime(today.year, today.month, today.day);
+          DateTime check = todayDate;
+          for (final d in dates) {
+            if (d == check || d == check.subtract(const Duration(days: 1))) {
+              streak++;
+              check = d;
+            } else {
+              break;
+            }
+          }
+        }
+
         final liveStats = [
-          ..._stats.sublist(0, 5),
-          _StatData(Icons.stars_rounded, 'Total XP', '$liveXp XP', const Color(0xFFFF4488)),
+          _StatData(Icons.quiz_rounded,     'Kuis\nSelesai',   '$quizDone',    const Color(0xFFFF00FF)),
+          _StatData(Icons.draw_rounded,      'Gambar\nSelesai', '$gambarDone',  const Color(0xFF00FF88)),
+          _StatData(Icons.layers_rounded,    'Total\nSelesai',  '$totalDone/$totalLevels', const Color(0xFF00FFFF)),
+          _StatData(Icons.local_fire_department_rounded, 'Streak\nBelajar', '$streak hari', const Color(0xFFFFAA00)),
+          _StatData(Icons.lock_open_rounded, 'Level\nTerbuka',  '${p.unlockedUpToLevel}/${ProgressionConfig.totalLevels}', const Color(0xFF9D00FF)),
+          _StatData(Icons.stars_rounded,     'Total XP',        '${p.totalXp} XP', const Color(0xFFFF4488)),
         ];
+
         return FadeTransition(
           opacity: anim,
           child: GridView.builder(
@@ -344,19 +371,34 @@ class _ProgressPageState extends State<ProgressPage>
     );
   }
 
-  // ── LEVELS — live dari engine ────────────────────────────────
+  // ── LEVELS — live dari engine, detail per-level per-feature ───
   Widget _buildLevels(Animation<double> anim) {
     return ListenableBuilder(
       listenable: ProgressionService.instance,
       builder: (context, _) {
-        final unlocked = ProgressionService.instance.unlockedUpToLevel;
+        final p        = ProgressionService.instance.progress;
+        final unlocked = p.unlockedUpToLevel;
         return FadeTransition(
           opacity: anim,
           child: Column(
             children: _diffs.map((d) {
-              // Difficulty terbuka kalau unlockedUpToLevel >= startLevel-nya
               final isUnlocked = unlocked >= d.startLevel;
-              return _DiffCard(data: d, unlocked: isUnlocked, pulseAnim: _pulseAnim);
+              // Hitung berapa level yang sudah selesai di difficulty ini (per feature)
+              int quizCompleted   = 0;
+              int gambarCompleted = 0;
+              final totalInDiff   = d.endLevel - d.startLevel + 1;
+              for (int lvl = d.startLevel; lvl <= d.endLevel; lvl++) {
+                if (p.isLevelCompleted(ProgressionConfig.featureQuiz, lvl))   quizCompleted++;
+                if (p.isLevelCompleted(ProgressionConfig.featureGambar, lvl)) gambarCompleted++;
+              }
+              return _DiffCard(
+                data: d,
+                unlocked: isUnlocked,
+                pulseAnim: _pulseAnim,
+                quizCompleted: quizCompleted,
+                gambarCompleted: gambarCompleted,
+                totalInDiff: totalInDiff,
+              );
             }).toList(),
           ),
         );
@@ -538,7 +580,17 @@ class _DiffCard extends StatelessWidget {
   final _DiffData data;
   final bool unlocked;
   final Animation<double> pulseAnim;
-  const _DiffCard({required this.data, required this.unlocked, required this.pulseAnim});
+  final int quizCompleted;
+  final int gambarCompleted;
+  final int totalInDiff;
+  const _DiffCard({
+    required this.data,
+    required this.unlocked,
+    required this.pulseAnim,
+    this.quizCompleted = 0,
+    this.gambarCompleted = 0,
+    this.totalInDiff = 0,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -617,6 +669,24 @@ class _DiffCard extends StatelessWidget {
                       fontFamily: 'Orbitron', color: Colors.white38,
                       fontSize: 9.5, letterSpacing: 0.2, height: 1.4,
                     )),
+                    if (unlocked && totalInDiff > 0) ...[
+                      const SizedBox(height: 8),
+                      _FeatureProgressRow(
+                        icon: Icons.quiz_rounded,
+                        label: 'Kuis',
+                        done: quizCompleted,
+                        total: totalInDiff,
+                        color: const Color(0xFF00FFFF),
+                      ),
+                      const SizedBox(height: 4),
+                      _FeatureProgressRow(
+                        icon: Icons.draw_rounded,
+                        label: 'Gambar',
+                        done: gambarCompleted,
+                        total: totalInDiff,
+                        color: const Color(0xFF00FF88),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -629,6 +699,45 @@ class _DiffCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── _FeatureProgressRow ───────────────────────────────────────
+class _FeatureProgressRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final int done, total;
+  final Color color;
+  const _FeatureProgressRow({
+    required this.icon, required this.label,
+    required this.done, required this.total, required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = total == 0 ? 0.0 : (done / total).clamp(0.0, 1.0);
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 10),
+        const SizedBox(width: 4),
+        Text('$label $done/$total', style: TextStyle(
+          color: color.withOpacity(0.8), fontSize: 8.5,
+          fontFamily: 'Orbitron', letterSpacing: 0.3,
+        )),
+        const SizedBox(width: 6),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: pct,
+              minHeight: 4,
+              backgroundColor: color.withOpacity(0.1),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
