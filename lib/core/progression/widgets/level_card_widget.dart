@@ -20,7 +20,6 @@ library;
 
 import 'package:flutter/material.dart';
 import '../models/user_progress.dart';
-import '../models/progression_config.dart';
 import '../services/progression_service.dart';
 
 class LevelCardWidget extends StatelessWidget {
@@ -53,20 +52,22 @@ class LevelCardWidget extends StatelessWidget {
     return ListenableBuilder(
       listenable: ProgressionService.instance,
       builder: (context, _) {
-        final status = ProgressionService.instance
-            .levelStatus(featureKey, levelId);
+        final status = ProgressionService.instance.levelStatus(
+          featureKey,
+          levelId,
+        );
         return _buildCard(context, status);
       },
     );
   }
 
   Widget _buildCard(BuildContext context, LevelStatus status) {
-    final isLocked    = status == LevelStatus.locked;
+    final isLocked = status == LevelStatus.locked;
     final isCompleted = status == LevelStatus.completed;
 
     // Warna & opacity berdasarkan status
     final effectiveColor = isLocked ? Colors.white24 : accentColor;
-    final cardOpacity    = isLocked ? 0.45 : 1.0;
+    final cardOpacity = isLocked ? 0.45 : 1.0;
 
     return Opacity(
       opacity: cardOpacity,
@@ -94,7 +95,7 @@ class LevelCardWidget extends StatelessWidget {
                         BoxShadow(
                           color: accentColor.withValues(alpha: 0.10),
                           blurRadius: 12,
-                        )
+                        ),
                       ]
                     : null,
               ),
@@ -145,7 +146,9 @@ class LevelCardWidget extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        isCompleted ? 'selesai' : (isLocked ? 'terkunci' : 'target'),
+                        isCompleted
+                            ? 'selesai'
+                            : (isLocked ? 'terkunci' : 'target'),
                         style: const TextStyle(
                           color: Colors.white24,
                           fontSize: 10,
@@ -165,7 +168,10 @@ class LevelCardWidget extends StatelessWidget {
   }
 
   Widget _buildLeadingBadge(
-      bool isLocked, bool isCompleted, Color effectiveColor) {
+    bool isLocked,
+    bool isCompleted,
+    Color effectiveColor,
+  ) {
     return Container(
       width: 38,
       height: 38,
@@ -181,29 +187,38 @@ class LevelCardWidget extends StatelessWidget {
         child: isLocked
             ? const Icon(Icons.lock_rounded, color: Colors.white24, size: 16)
             : isCompleted
-                ? Icon(Icons.check_rounded, color: effectiveColor, size: 18)
-                : Text(
-                    '$levelId',
-                    style: TextStyle(
-                      color: effectiveColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+            ? Icon(Icons.check_rounded, color: effectiveColor, size: 18)
+            : Text(
+                '$levelId',
+                style: TextStyle(
+                  color: effectiveColor,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
       ),
     );
   }
 
   Widget _buildTrailingIcon(
-      bool isLocked, bool isCompleted, Color effectiveColor) {
+    bool isLocked,
+    bool isCompleted,
+    Color effectiveColor,
+  ) {
     if (isLocked) {
-      return const Icon(Icons.lock_outline_rounded,
-          color: Colors.white12, size: 18);
+      return const Icon(
+        Icons.lock_outline_rounded,
+        color: Colors.white12,
+        size: 18,
+      );
     }
     if (isCompleted) {
       return Icon(Icons.replay_rounded, color: effectiveColor, size: 18);
     }
-    return const Icon(Icons.chevron_right_rounded,
-        color: Colors.white24, size: 20);
+    return const Icon(
+      Icons.chevron_right_rounded,
+      color: Colors.white24,
+      size: 20,
+    );
   }
 }

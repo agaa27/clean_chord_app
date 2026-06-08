@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:clean_chord/features/kuis_chord/pages/kuis_chord_page.dart';
 import 'package:clean_chord/features/metronom/pages/metronom_page.dart';
@@ -218,8 +217,8 @@ class _MateriPageState extends State<MateriPage> with TickerProviderStateMixin {
     return ListenableBuilder(
       listenable: ProgressionService.instance,
       builder: (context, _) {
-        final p          = ProgressionService.instance.progress;
-        final levelId    = p.unlockedUpToLevel;
+        final p = ProgressionService.instance.progress;
+        final levelId = p.unlockedUpToLevel;
         final difficulty = ProgressionConfig.difficultyOf(levelId);
 
         Color color;
@@ -227,15 +226,15 @@ class _MateriPageState extends State<MateriPage> with TickerProviderStateMixin {
         switch (difficulty) {
           case 'Menengah':
             color = const Color(0xFFBD00FF);
-            icon  = Icons.star_half_rounded;
+            icon = Icons.star_half_rounded;
             break;
           case 'Mahir':
             color = const Color(0xFFFFAA00);
-            icon  = Icons.star_rounded;
+            icon = Icons.star_rounded;
             break;
           default:
             color = Colors.cyanAccent;
-            icon  = Icons.star_outline_rounded;
+            icon = Icons.star_outline_rounded;
         }
 
         return AnimatedBuilder(
@@ -254,7 +253,11 @@ class _MateriPageState extends State<MateriPage> with TickerProviderStateMixin {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icon, color: color.withOpacity(0.6 + 0.4 * _pulseAnim.value), size: 10),
+                  Icon(
+                    icon,
+                    color: color.withOpacity(0.6 + 0.4 * _pulseAnim.value),
+                    size: 10,
+                  ),
                   const SizedBox(width: 5),
                   Text(
                     difficulty.toUpperCase(),
@@ -280,9 +283,8 @@ class _MateriPageState extends State<MateriPage> with TickerProviderStateMixin {
       width: double.infinity,
       child: AnimatedBuilder(
         animation: _scanAnim,
-        builder: (context, _) => CustomPaint(
-          painter: _ScanBarPainter(_scanAnim.value, _colorIndex),
-        ),
+        builder: (context, _) =>
+            CustomPaint(painter: _ScanBarPainter(_scanAnim.value, _colorIndex)),
       ),
     );
   }
@@ -489,20 +491,22 @@ class _ScanBarPainter extends CustomPainter {
     final h = size.height;
 
     // Track background
-    final bgPaint = Paint()
-      ..color = const Color(0xFFFFFFFF).withOpacity(0.04);
+    final bgPaint = Paint()..color = const Color(0xFFFFFFFF).withOpacity(0.04);
     canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, w, h), const Radius.circular(2)),
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(0, 0, w, h),
+        const Radius.circular(2),
+      ),
       bgPaint,
     );
 
     final baseColor = _palette[colorIndex % _palette.length];
 
-    final travel  = 1.0 + _cometWidth;
+    final travel = 1.0 + _cometWidth;
     final centerX = (progress * travel - _cometWidth / 2) * w;
-    final halfW   = _cometWidth * w / 2;
+    final halfW = _cometWidth * w / 2;
 
-    final left  = centerX - halfW;
+    final left = centerX - halfW;
     final right = centerX + halfW;
 
     final rect = Rect.fromLTRB(left, 0, right, h);
@@ -539,10 +543,7 @@ class _ScanBarPainter extends CustomPainter {
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
 
     canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        rect.inflate(1),
-        const Radius.circular(3),
-      ),
+      RRect.fromRectAndRadius(rect.inflate(1), const Radius.circular(3)),
       glowPaint,
     );
   }

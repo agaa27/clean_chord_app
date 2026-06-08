@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'core/theme/app_theme.dart';
 import 'core/progression/progression.dart';
 import 'core/profile/profile.dart';
-import 'features/home/pages/home_page.dart';
 import 'features/home/pages/splash_page.dart';
 
 void main() async {
