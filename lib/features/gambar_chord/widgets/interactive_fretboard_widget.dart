@@ -360,8 +360,9 @@ class _InteractivePainter extends CustomPainter {
     }
 
     for (final dot in placedDots) {
-      if (dot.string < mutedStrings.length && mutedStrings[dot.string])
+      if (dot.string < mutedStrings.length && mutedStrings[dot.string]) {
         continue;
+      }
       if (barreCovered.contains('${dot.string}_${dot.fret}')) continue;
 
       final row = dot.fret - baseFret;

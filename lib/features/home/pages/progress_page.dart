@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../core/progression/progression.dart';
 import '../../../core/profile/profile.dart';
@@ -669,10 +668,12 @@ class _ProgressPageState extends State<ProgressPage>
               int quizCompleted = 0, gambarCompleted = 0;
               final totalInDiff = d.endLevel - d.startLevel + 1;
               for (int lvl = d.startLevel; lvl <= d.endLevel; lvl++) {
-                if (p.isLevelCompleted(ProgressionConfig.featureQuiz, lvl))
+                if (p.isLevelCompleted(ProgressionConfig.featureQuiz, lvl)) {
                   quizCompleted++;
-                if (p.isLevelCompleted(ProgressionConfig.featureGambar, lvl))
+                }
+                if (p.isLevelCompleted(ProgressionConfig.featureGambar, lvl)) {
                   gambarCompleted++;
+                }
               }
               return _DiffCard(
                 data: d,
