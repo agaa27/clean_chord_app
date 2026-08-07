@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../data/chord_library.dart';
 import '../models/chord_model.dart';
 import '../widgets/chord_fretboard_widget.dart';
+import '../services/chord_sound_service.dart';
+
+enum _ChordSoundState { idle, loading, playing }
 
 class PustakaChordPage extends StatefulWidget {
   const PustakaChordPage({super.key});
@@ -15,6 +18,10 @@ class _PustakaChordPageState extends State<PustakaChordPage>
   String _selectedRoot = 'C';
   String _selectedType = 'major';
   int _currentShapeIndex = 0;
+
+  final ChordSoundService _soundService = ChordSoundService();
+  _ChordSoundState _soundState = _ChordSoundState.idle;
+  late AnimationController _pulseAnim;
 
   late PageController _pageController;
   late AnimationController _headerAnim;
@@ -59,6 +66,11 @@ class _PustakaChordPageState extends State<PustakaChordPage>
   @override
   void initState() {
     super.initState();
+    _soundService.init();
+    _pulseAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
     _pageController = PageController();
     _headerAnim = AnimationController(
       vsync: this,
@@ -70,9 +82,41 @@ class _PustakaChordPageState extends State<PustakaChordPage>
 
   @override
   void dispose() {
+    _soundService.dispose();
+    _pulseAnim.dispose();
     _pageController.dispose();
     _headerAnim.dispose();
     super.dispose();
+  }
+
+  Future<void> _playSelectedChordSound() async {
+    if (_soundState != _ChordSoundState.idle) return;
+    final chord = _selectedChord;
+    if (chord.shapes.isEmpty) return;
+    final shapeIndex = _currentShapeIndex.clamp(0, chord.shapes.length - 1);
+
+    setState(() => _soundState = _ChordSoundState.loading);
+    final ok = await _soundService.playChord(
+      _selectedRoot,
+      _selectedType,
+      shapeIndex,
+    );
+    if (!mounted) return;
+
+    if (!ok) {
+      setState(() => _soundState = _ChordSoundState.idle);
+      return;
+    }
+
+    setState(() => _soundState = _ChordSoundState.playing);
+    _pulseAnim.repeat(reverse: true);
+    // ikutin durasi file suara (~1.4 detik) biar tombol nggak spam-able
+    await Future.delayed(const Duration(milliseconds: 1400));
+    if (!mounted) return;
+    _pulseAnim
+      ..stop()
+      ..value = 0;
+    setState(() => _soundState = _ChordSoundState.idle);
   }
 
   void _selectRoot(String root) {
@@ -136,6 +180,12 @@ class _PustakaChordPageState extends State<PustakaChordPage>
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       appBar: _buildAppBar(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: _activeColor,
+        onPressed: hasShapes ? _playSelectedChordSound : null,
+        child: _buildSoundButtonIcon(),
+      ),
       body: Column(
         children: [
           // ── Root selector ─────────────────────────────
@@ -187,6 +237,33 @@ class _PustakaChordPageState extends State<PustakaChordPage>
           const SizedBox(height: 24),
         ],
       ),
+    );
+  }
+
+  // ── Icon tombol suara: idle / loading / playing (pulse) ──────────────
+  Widget _buildSoundButtonIcon() {
+    if (_soundState == _ChordSoundState.loading) {
+      return const SizedBox(
+        key: ValueKey('loading'),
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+      );
+    }
+    if (_soundState == _ChordSoundState.playing) {
+      return ScaleTransition(
+        key: const ValueKey('playing'),
+        scale: Tween(
+          begin: 0.85,
+          end: 1.15,
+        ).animate(CurvedAnimation(parent: _pulseAnim, curve: Curves.easeInOut)),
+        child: const Icon(Icons.graphic_eq_rounded, color: Colors.black),
+      );
+    }
+    return const Icon(
+      key: ValueKey('idle'),
+      Icons.volume_up_rounded,
+      color: Colors.black,
     );
   }
 

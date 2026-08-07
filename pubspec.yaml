@@ -52,6 +52,7 @@ flutter:
         - asset: assets/fonts/Orbitron-Regular.ttf
 
   assets:
+    - assets/audio/chords/
     - assets/audio/Metronome.mp3
     - assets/audio/quiz_correct.mp3
     - assets/audio/quiz_fail.mp3
