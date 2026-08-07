@@ -1,6 +1,29 @@
 import 'package:audioplayers/audioplayers.dart';
 import '../../../core/chord/utils/chord_utils.dart';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ChordSoundService — muter preview suara chord (assets/audio/chords/*.wav).
+// 1 file per SHAPE/voicing, jadi geser posisi di Pustaka Chord bakal ganti
+// bunyi sesuai bentuk fret yang lagi ditampilin.
+//
+// PENTING: pakai PlayerMode.mediaPlayer, BUKAN lowLatency. lowLatency di
+// Android pakai backend SoundPool yang kadang nge-cache source lama dan gak
+// reload pas dikasih AssetSource baru secara cepat/dinamis (gejalanya: suara
+// gak ganti walau shape/chord udah beda) — makanya dulu kedengeran "sama
+// aja" pas geser shape. mediaPlayer sedikit lebih lambat (~100-200ms) tapi
+// selalu muter file yang benar-benar diminta.
+//
+// Source juga TIDAK di-preload di background — cuma di-set & diputar saat
+// playChord() dipanggil eksplisit (dari tombol), biar gak ada kejadian
+// suara nyala sendiri pas user cuma geser-geser posisi.
+//
+// CATATAN: sempet ditambahin _player.release() sebelum tiap play() sebagai
+// "pengaman ekstra", tapi itu justru bikin delay & sesekali freeze (release()
+// bongkar total resource native player, berat kalau dipanggil tiap tombol
+// dipencet). Dicabut lagi — stop() + play() langsung udah cukup dan lebih
+// ringan, PlayerMode.mediaPlayer sendirian udah cukup buat nyegah bug
+// "suara gak ganti" dari sebelumnya.
+// ─────────────────────────────────────────────────────────────────────────────
 class ChordSoundService {
   final AudioPlayer _player = AudioPlayer();
   bool _initialized = false;
@@ -28,8 +51,6 @@ class ChordSoundService {
     final fileName = _fileNameFor(root, type, shapeIndex);
     try {
       await _player.stop();
-      await _player
-          .release(); // pastiin source lama beneran dilepas, bukan cuma di-pause
       await _player.play(AssetSource('audio/chords/$fileName.wav'));
       return true;
     } catch (_) {

@@ -4,6 +4,7 @@ import 'package:clean_chord/features/metronom/pages/metronom_page.dart';
 import '../widgets/menu_card.dart';
 import 'package:clean_chord/features/pustaka_chord/pages/pustaka_chord_page.dart';
 import 'package:clean_chord/features/gambar_chord/pages/gambar_chord_page.dart';
+import 'package:clean_chord/features/ear_training/pages/ear_training_page.dart';
 import '../../../core/progression/progression.dart';
 
 class MateriPage extends StatefulWidget {
@@ -62,7 +63,12 @@ class _MateriPageState extends State<MateriPage> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 800),
     )..forward();
 
-    _cardAnims = List.generate(4, (i) {
+    // PENTING: angka ini harus selalu sama dengan (jumlah item alatItems +
+    // jumlah item modulItems) di _buildGrid(). Sekarang: 2 alat (Pustaka
+    // Chord, Metronom) + 3 modul (Kuis Chord, Gambar Chord, Ear Training) = 5.
+    // Kalau nambah card baru lagi nanti, angka ini WAJIB di-update juga,
+    // kalau enggak bakal RangeError pas render grid-nya.
+    _cardAnims = List.generate(5, (i) {
       return CurvedAnimation(
         parent: _gridFadeController,
         curve: Interval(i * 0.15, 0.6 + i * 0.1, curve: Curves.easeOutBack),
@@ -366,6 +372,16 @@ class _MateriPageState extends State<MateriPage> with TickerProviderStateMixin {
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => GambarChordPage()),
+        ),
+      ),
+      _CardData(
+        color: const Color(0xFFFFD700),
+        title: 'Ear Training',
+        subtitle: 'Tebak dari suara',
+        icon: Icons.headphones_rounded,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const EarTrainingPage()),
         ),
       ),
     ];
